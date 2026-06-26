@@ -1,0 +1,26 @@
+{
+    "name": "tx-admin/schema-compare",
+    "description": "Database schema structure comparison toolkit (ClickHouse / MySQL). Framework-agnostic core with Hyperf integration.",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "tx-admin"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "TxAdmin\\SchemaCompare\\": "src/"
+        }
+    },
+    "extra": {
+        "hyperf": {
+            "config": "TxAdmin\\SchemaCompare\\ConfigProvider"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
