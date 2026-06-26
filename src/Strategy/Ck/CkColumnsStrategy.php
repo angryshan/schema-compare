@@ -40,7 +40,7 @@ class CkColumnsStrategy extends AbstractStrategy
         $sql = "
             SELECT
                 `database`, `table`, `name`, `type`,
-                    default_kind`, `default_expression`, `comment`,
+                    `default_kind`, `default_expression`, `comment`,
                     `compression_codec`,
                     `is_in_partition_key`, `is_in_sorting_key`,
                     `is_in_primary_key`, `is_in_sampling_key`
