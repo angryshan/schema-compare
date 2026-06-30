@@ -7,11 +7,15 @@ namespace TxAdmin\SchemaCompare\Driver;
 use TxAdmin\SchemaCompare\AbstractSchemaDriver;
 use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 use TxAdmin\SchemaCompare\Contracts\SchemaStrategyInterface;
+use TxAdmin\SchemaCompare\Strategy\Mysql\MysqlColumnsStrategy;
+use TxAdmin\SchemaCompare\Strategy\Mysql\MysqlIndexesStrategy;
+use TxAdmin\SchemaCompare\Strategy\Mysql\MysqlTableStrategy;
 
 /**
- * MySQL 结构对比驱动（骨架）
+ * MySQL 结构对比驱动
  *
- * 待实现 MysqlColumnsStrategy / MysqlIndexesStrategy 后注入
+ * 默认使用 Columns / Indexes / Table 三个策略
+ * 可通过构造函数第三个参数覆盖，实现自定义策略组合
  */
 class MysqlSchemaDriver extends AbstractSchemaDriver
 {
@@ -30,7 +34,26 @@ class MysqlSchemaDriver extends AbstractSchemaDriver
 
     protected function defaultStrategies(): array
     {
-        // TODO: return [new MysqlColumnsStrategy(), new MysqlIndexesStrategy()];
-        return [];
+        return [
+            new MysqlColumnsStrategy(),
+            new MysqlIndexesStrategy(),
+            new MysqlTableStrategy(),
+        ];
+    }
+
+    /**
+     * 统一设置所有策略的分表过滤开关
+     *
+     * @param bool $exclude true=排除分表（默认），false=包含分表
+     * @return $this
+     */
+    public function setExcludeSplitTables(bool $exclude): self
+    {
+        foreach ($this->strategies as $strategy) {
+            if (property_exists($strategy, 'excludeSplitTables')) {
+                $strategy->excludeSplitTables = $exclude;
+            }
+        }
+        return $this;
     }
 }

@@ -117,19 +117,29 @@ $result = $manager->compareFromJson('clickhouse', $jsonBaseline, $database);
 
 ```php
 [
-    'has_diff' => bool,
+    'has_diff' => bool,   // 是否有差异
     'details'  => [
         'columns'     => [
-            'has_diff'       => bool,
-            'summary'        => ['only_in_baseline' => n, 'only_in_live' => n, 'field_changed' => n],
-            'diffs_by_table' => ['table_name' => ['only_in_baseline' => [...], 'field_changed' => [...]]],
+            'has_diff'       => bool,   // 该维度是否有差异
+            'summary'        => [
+                'only_in_baseline' => n,  // 基准有但线上无（SVN有但MySQL没有 = 可能被删了）
+                'only_in_live'     => n,  // 线上有但基准无（MySQL有但SVN没有 = 可能新增了）
+                'field_changed'    => n,  // 同名字段属性变化数
+            ],
+            'diffs_by_table' => [
+                'table_name' => [
+                    'only_in_baseline' => [...],  // 该表被删除的字段列表
+                    'only_in_live'     => [...],  // 该表新增的字段列表
+                    'field_changed'    => [...],  // 字段属性变化详情
+                ]
+            ],
         ],
         'indexes'     => [
             'has_diff'         => bool,
             'summary'          => [...],
-            'only_in_baseline' => [...],
-            'only_in_live'     => [...],
-            'changed'          => ['table_name' => ['partition_key' => ['baseline' => '...', 'live' => '...']]],
+            'only_in_baseline' => [...],  // 基准有但线上无的索引
+            'only_in_live'     => [...],  // 线上有但基准无的索引
+            'changed'          => [...],  // 索引属性变化
         ],
         'projections' => [
             'has_diff'            => bool,
@@ -139,6 +149,26 @@ $result = $manager->compareFromJson('clickhouse', $jsonBaseline, $database);
     ],
 ]
 ```
+
+### 字段属性名对照（Columns）
+
+| 英文属性名 | 中文含义 | 示例值 |
+|-----------|---------|--------|
+| `type` | 类型 | `varchar(255)`、`int(11)` |
+| `is_nullable` | 是否可空 | `YES` / `NO` |
+| `column_default` | 默认值 | `NULL`、`0`、`current_timestamp()` |
+| `extra` | 额外属性 | `auto_increment`、`on update CURRENT_TIMESTAMP` |
+| `character_set_name` | 字符集 | `utf8mb4` |
+| `collation_name` | 排序规则 | `utf8mb4_general_ci` |
+| `comment` | 备注 | 字段注释 |
+
+### 术语说明
+
+- **baseline（基准）**：SVN 中保存的 JSON 基准文件，代表"期望的结构"
+- **live（线上）**：当前数据库实时查询到的结构，代表"实际的结构"
+- **only_in_baseline**：基准有但线上无 → SVN有但MySQL没有（可能被删了）
+- **only_in_live**：线上有但基准无 → MySQL有但SVN没有（可能新增了）
+- **field_changed**：同名字段的属性不一致（如类型、默认值等变了）
 
 ---
 
