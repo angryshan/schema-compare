@@ -18,9 +18,9 @@ class DiffTranslator
     /** @var array 差异类型映射 [英文Key => 中文标签] */
     protected array $diffTypeMap = [
         'only_in_baseline' => '基准有线上无',
-        'only_in_live'     => '线上有基准无',
-        'field_changed'    => '属性变化',
-        'changed'          => '属性变化',
+        'only_in_live' => '线上有基准无',
+        'field_changed' => '属性变化',
+        'changed' => '属性变化',
     ];
 
     /** @var string 分组结构的 key 列表 */
@@ -32,7 +32,7 @@ class DiffTranslator
 
     /**
      * @param array $fieldLabels 属性名翻译映射 [维度 => [英文 => 中文]]
-     * @param array|null $diffTypeMap 自定义差异类型映射，null 使用默认中文
+     * @param null|array $diffTypeMap 自定义差异类型映射，null 使用默认中文
      */
     public function __construct(array $fieldLabels = [], ?array $diffTypeMap = null)
     {
@@ -45,17 +45,17 @@ class DiffTranslator
     /**
      * 翻译 diff 结果
      *
-     * @param  array  $rawDiff 原始 diff 数据
-     * @param  string $dimLabel 维度中文名（如 '字段'、'索引'）
-     * @return array  翻译后的结果
+     * @param array $rawDiff 原始 diff 数据
+     * @param string $dimLabel 维度中文名（如 '字段'、'索引'）
+     * @return array 翻译后的结果
      */
     public function translate(array $rawDiff, string $dimLabel): array
     {
         if (empty($rawDiff)) {
             return [
                 'has_diff' => false,
-                'summary'  => [],
-                '明细'     => [],
+                'summary' => [],
+                '明细' => [],
             ];
         }
 
@@ -63,13 +63,13 @@ class DiffTranslator
 
         return [
             '是否有不同' => $rawDiff['has_diff'] ?? false,
-            '对比维度'   => $dimLabel,
-            '总结'       => [
+            '对比维度' => $dimLabel,
+            '总结' => [
                 ($this->diffTypeMap['only_in_baseline'] ?? 'only_in_baseline') => $summary['only_in_baseline'] ?? 0,
-                ($this->diffTypeMap['only_in_live'] ?? 'only_in_live')         => $summary['only_in_live']     ?? 0,
-                ($this->diffTypeMap['field_changed'] ?? 'field_changed')        => $summary['field_changed']    ?? 0,
+                ($this->diffTypeMap['only_in_live'] ?? 'only_in_live') => $summary['only_in_live'] ?? 0,
+                ($this->diffTypeMap['field_changed'] ?? 'field_changed') => $summary['field_changed'] ?? 0,
             ],
-            '明细'       => $this->translateDetails($rawDiff, $dimLabel),
+            '明细' => $this->translateDetails($rawDiff, $dimLabel),
         ];
     }
 
@@ -92,14 +92,14 @@ class DiffTranslator
     /**
      * 翻译分组结构（如 diffs_by_table）
      *
-     * @param  array  $groupedData 分组数据
-     * @param  string $dimLabel    维度标签
-     * @return array  翻译后的分组数据
+     * @param array $groupedData 分组数据
+     * @param string $dimLabel 维度标签
+     * @return array 翻译后的分组数据
      */
     public function translateGroupedDiff(array $groupedData, string $dimLabel): array
     {
-        $result  = [];
-        $labels  = $this->fieldLabels[$dimLabel] ?? [];
+        $result = [];
+        $labels = $this->fieldLabels[$dimLabel] ?? [];
 
         foreach ($groupedData as $key => $item) {
             $translated = [];
@@ -140,9 +140,9 @@ class DiffTranslator
     /**
      * 翻译字段变化详情
      *
-     * @param  array $changes 字段变化数据 ['field_name' => ['attr' => ['old', 'new'], ...]]
-     * @param  array $labels  属性名映射 ['attr' => '中文名', ...]
-     * @return array  翻译后的数据
+     * @param array $changes 字段变化数据 ['field_name' => ['attr' => ['old', 'new'], ...]]
+     * @param array $labels 属性名映射 ['attr' => '中文名', ...]
+     * @return array 翻译后的数据
      */
     public function translateFieldChanges(array $changes, array $labels): array
     {

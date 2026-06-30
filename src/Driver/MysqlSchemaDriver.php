@@ -21,8 +21,8 @@ class MysqlSchemaDriver extends AbstractSchemaDriver
 {
     /**
      * @param ConnectionAdapterInterface $adapter
-     * @param string                     $type       默认 'mysql'
-     * @param SchemaStrategyInterface[]  $strategies 为空时使用 defaultStrategies()
+     * @param string $type 默认 'mysql'
+     * @param SchemaStrategyInterface[] $strategies 为空时使用 defaultStrategies()
      */
     public function __construct(
         ConnectionAdapterInterface $adapter,
@@ -30,15 +30,6 @@ class MysqlSchemaDriver extends AbstractSchemaDriver
         array $strategies = []
     ) {
         parent::__construct($adapter, $type, $strategies);
-    }
-
-    protected function defaultStrategies(): array
-    {
-        return [
-            new MysqlColumnsStrategy(),
-            new MysqlIndexesStrategy(),
-            new MysqlTableStrategy(),
-        ];
     }
 
     /**
@@ -55,5 +46,14 @@ class MysqlSchemaDriver extends AbstractSchemaDriver
             }
         }
         return $this;
+    }
+
+    protected function defaultStrategies(): array
+    {
+        return [
+            new MysqlColumnsStrategy(),
+            new MysqlIndexesStrategy(),
+            new MysqlTableStrategy(),
+        ];
     }
 }

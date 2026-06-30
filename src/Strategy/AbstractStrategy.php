@@ -17,7 +17,7 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     protected array $compareFields;
 
     /**
-     * @param array|null $compareFields 为 null 时使用 getDefaultCompareFields()
+     * @param null|array $compareFields 为 null 时使用 getDefaultCompareFields()
      */
     public function __construct(?array $compareFields = null)
     {
@@ -29,7 +29,7 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     // ----------------------------------------------------------------
 
     /**
-     * @param array    $rows  行数组
+     * @param array $rows 行数组
      * @param callable $keyFn fn(array $row): string  生成 map key
      * @return array
      */

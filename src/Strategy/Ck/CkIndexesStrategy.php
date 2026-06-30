@@ -28,7 +28,7 @@ class CkIndexesStrategy extends AbstractStrategy
     public function fetchData(ConnectionAdapterInterface $adapter, string $database): array
     {
         $fields = implode(', ', array_merge(['database', 'name AS table'], $this->getDefaultCompareFields()));
-        $sql    = "
+        $sql = "
             SELECT {$fields}
             FROM system.tables
             WHERE database = '{$database}'
@@ -47,18 +47,18 @@ class CkIndexesStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $table => $bRow) {
             if (!isset($liveMap[$table])) {
                 $onlyInBaseline[] = $table;
                 continue;
             }
-            $lRow  = $liveMap[$table];
+            $lRow = $liveMap[$table];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -81,15 +81,15 @@ class CkIndexesStrategy extends AbstractStrategy
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'       => $hasDiff,
-            'summary'        => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'only_in_baseline' => $onlyInBaseline,
-            'only_in_live'     => $onlyInLive,
-            'changed'          => $changed,
+            'only_in_live' => $onlyInLive,
+            'changed' => $changed,
         ];
     }
 }

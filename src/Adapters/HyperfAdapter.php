@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace TxAdmin\SchemaCompare\Adapters;
 
-use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 use Hyperf\DB\DB;
+use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 
 /**
  * Hyperf 适配器

@@ -51,18 +51,18 @@ class CkProjectionsStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $key => $bRow) {
             if (!isset($liveMap[$key])) {
                 $onlyInBaseline[] = $key;
                 continue;
             }
-            $lRow  = $liveMap[$key];
+            $lRow = $liveMap[$key];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -85,17 +85,17 @@ class CkProjectionsStrategy extends AbstractStrategy
         // 按 "table.projection" 归组
         $diffsByProjection = [];
         foreach ($onlyInBaseline as $key) {
-            $parts      = explode('.', $key, 3);
-            $projKey    = $parts[0] . '.' . $parts[1];
+            $parts = explode('.', $key, 3);
+            $projKey = $parts[0] . '.' . $parts[1];
             $diffsByProjection[$projKey]['only_in_baseline'][] = $key;
         }
         foreach ($onlyInLive as $key) {
-            $parts   = explode('.', $key, 3);
+            $parts = explode('.', $key, 3);
             $projKey = $parts[0] . '.' . $parts[1];
             $diffsByProjection[$projKey]['only_in_live'][] = $key;
         }
         foreach ($changed as $key => $diffs) {
-            $parts   = explode('.', $key, 3);
+            $parts = explode('.', $key, 3);
             $projKey = $parts[0] . '.' . $parts[1];
             $diffsByProjection[$projKey]['field_changed'][$key] = $diffs;
         }
@@ -103,11 +103,11 @@ class CkProjectionsStrategy extends AbstractStrategy
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'          => $hasDiff,
-            'summary'           => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'diffs_by_projection' => $diffsByProjection,
         ];

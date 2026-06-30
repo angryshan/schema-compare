@@ -30,29 +30,19 @@ abstract class AbstractSchemaDriver
     protected array $strategies = [];
 
     /**
-     * @param ConnectionAdapterInterface  $adapter    DB 连接适配器
-     * @param string                      $type       驱动标识，如 'clickhouse' / 'mysql'
-     * @param SchemaStrategyInterface[]   $strategies 策略集合；为空时调用 defaultStrategies()
+     * @param ConnectionAdapterInterface $adapter DB 连接适配器
+     * @param string $type 驱动标识，如 'clickhouse' / 'mysql'
+     * @param SchemaStrategyInterface[] $strategies 策略集合；为空时调用 defaultStrategies()
      */
     public function __construct(
         ConnectionAdapterInterface $adapter,
         string $type,
         array $strategies = []
     ) {
-        $this->adapter    = $adapter;
-        $this->type       = $type;
+        $this->adapter = $adapter;
+        $this->type = $type;
         $this->strategies = empty($strategies) ? $this->defaultStrategies() : $strategies;
     }
-
-    // ----------------------------------------------------------------
-    // 子类实现
-    // ----------------------------------------------------------------
-
-    /**
-     * 当外部未传 strategies 时，使用的默认策略集合
-     * @return SchemaStrategyInterface[]
-     */
-    abstract protected function defaultStrategies(): array;
 
     // ----------------------------------------------------------------
     // 公共接口
@@ -75,8 +65,8 @@ abstract class AbstractSchemaDriver
     /**
      * 查询目标库所有策略的结构数据
      *
-     * @param  string $database 目标库名
-     * @return array  ['columns' => [...], 'indexes' => [...], ...]
+     * @param string $database 目标库名
+     * @return array ['columns' => [...], 'indexes' => [...], ...]
      */
     public function fetchStructure(string $database): array
     {
@@ -99,9 +89,9 @@ abstract class AbstractSchemaDriver
     /**
      * 比较 JSON 基准 vs 实时数据
      *
-     * @param  string $jsonBaseline fetchStructure() 导出的 JSON 字符串
-     * @param  string $database     实时查询的目标库名
-     * @return array  diff 报告
+     * @param string $jsonBaseline fetchStructure() 导出的 JSON 字符串
+     * @param string $database 实时查询的目标库名
+     * @return array diff 报告
      * @throws InvalidBaselineException
      */
     public function compareFromJson(string $jsonBaseline, string $database): array
@@ -116,9 +106,9 @@ abstract class AbstractSchemaDriver
     /**
      * 比较数组基准 vs 实时数据
      *
-     * @param  array  $baseline fetchStructure() 格式的基准数据
-     * @param  string $database 实时查询的目标库名
-     * @return array  diff 报告
+     * @param array $baseline fetchStructure() 格式的基准数据
+     * @param string $database 实时查询的目标库名
+     * @return array diff 报告
      */
     public function compareFromArray(array $baseline, string $database): array
     {
@@ -129,8 +119,8 @@ abstract class AbstractSchemaDriver
     /**
      * 聚合所有策略的 diff 结果
      *
-     * @param  array $baseline fetchStructure() 格式的基准数据
-     * @param  array $live     fetchStructure() 格式的实时数据
+     * @param array $baseline fetchStructure() 格式的基准数据
+     * @param array $live fetchStructure() 格式的实时数据
      * @return array{has_diff: bool, details: array}
      */
     public function diff(array $baseline, array $live): array
@@ -139,9 +129,9 @@ abstract class AbstractSchemaDriver
         $details = [];
 
         foreach ($this->strategies as $strategy) {
-            $key          = $strategy->getKey();
+            $key = $strategy->getKey();
             $baselineData = $baseline[$key] ?? [];
-            $liveData     = $live[$key] ?? [];
+            $liveData = $live[$key] ?? [];
 
             $result = $strategy->diff($baselineData, $liveData);
 
@@ -153,7 +143,17 @@ abstract class AbstractSchemaDriver
 
         return [
             'has_diff' => $hasDiff,
-            'details'  => $details,
+            'details' => $details,
         ];
     }
+
+    // ----------------------------------------------------------------
+    // 子类实现
+    // ----------------------------------------------------------------
+
+    /**
+     * 当外部未传 strategies 时，使用的默认策略集合
+     * @return SchemaStrategyInterface[]
+     */
+    abstract protected function defaultStrategies(): array;
 }

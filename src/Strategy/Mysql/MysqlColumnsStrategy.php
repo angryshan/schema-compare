@@ -22,6 +22,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
      * @var bool
      */
     public bool $excludeSplitTables = true;
+
     public function getKey(): string
     {
         return 'columns';
@@ -63,17 +64,6 @@ class MysqlColumnsStrategy extends AbstractStrategy
     }
 
     /**
-     * 生成分表过滤 SQL 片段
-     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
-     */
-    protected function splitTableFilter(): string
-    {
-        return $this->excludeSplitTables
-            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
-            : '';
-    }
-
-    /**
      * diff key: "{table}.{name}"
      * 按表归组输出
      */
@@ -84,18 +74,18 @@ class MysqlColumnsStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $key => $bRow) {
             if (!isset($liveMap[$key])) {
                 $onlyInBaseline[] = $key;
                 continue;
             }
-            $lRow  = $liveMap[$key];
+            $lRow = $liveMap[$key];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -118,28 +108,39 @@ class MysqlColumnsStrategy extends AbstractStrategy
         // 按表归组
         $diffsByTable = [];
         foreach ($onlyInBaseline as $key) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['only_in_baseline'][] = $key;
         }
         foreach ($onlyInLive as $key) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['only_in_live'][] = $key;
         }
         foreach ($changed as $key => $diffs) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['field_changed'][$key] = $diffs;
         }
 
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'      => $hasDiff,
-            'summary'       => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'diffs_by_table' => $diffsByTable,
         ];
+    }
+
+    /**
+     * 生成分表过滤 SQL 片段
+     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
+     */
+    protected function splitTableFilter(): string
+    {
+        return $this->excludeSplitTables
+            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
+            : '';
     }
 }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace TxAdmin\SchemaCompare\Adapters;
 
-use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 use think\facade\Db;
+use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 
 /**
  * ThinkPHP 6 适配器

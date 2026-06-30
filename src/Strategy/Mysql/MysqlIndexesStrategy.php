@@ -23,6 +23,7 @@ class MysqlIndexesStrategy extends AbstractStrategy
      * @var bool
      */
     public bool $excludeSplitTables = true;
+
     public function getKey(): string
     {
         return 'indexes';
@@ -61,17 +62,6 @@ class MysqlIndexesStrategy extends AbstractStrategy
     }
 
     /**
-     * 生成分表过滤 SQL 片段
-     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
-     */
-    protected function splitTableFilter(): string
-    {
-        return $this->excludeSplitTables
-            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
-            : '';
-    }
-
-    /**
      * diff key: "{table}.{index_name}.{seq_in_index}"
      * 按索引归组输出
      */
@@ -82,18 +72,18 @@ class MysqlIndexesStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $key => $bRow) {
             if (!isset($liveMap[$key])) {
                 $onlyInBaseline[] = $key;
                 continue;
             }
-            $lRow  = $liveMap[$key];
+            $lRow = $liveMap[$key];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -116,17 +106,17 @@ class MysqlIndexesStrategy extends AbstractStrategy
         // 按 "table.index_name" 归组
         $diffsByIndex = [];
         foreach ($onlyInBaseline as $key) {
-            $parts    = explode('.', $key, 3);
+            $parts = explode('.', $key, 3);
             $indexKey = $parts[0] . '.' . $parts[1];
             $diffsByIndex[$indexKey]['only_in_baseline'][] = $key;
         }
         foreach ($onlyInLive as $key) {
-            $parts    = explode('.', $key, 3);
+            $parts = explode('.', $key, 3);
             $indexKey = $parts[0] . '.' . $parts[1];
             $diffsByIndex[$indexKey]['only_in_live'][] = $key;
         }
         foreach ($changed as $key => $diffs) {
-            $parts    = explode('.', $key, 3);
+            $parts = explode('.', $key, 3);
             $indexKey = $parts[0] . '.' . $parts[1];
             $diffsByIndex[$indexKey]['field_changed'][$key] = $diffs;
         }
@@ -134,13 +124,24 @@ class MysqlIndexesStrategy extends AbstractStrategy
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'        => $hasDiff,
-            'summary'         => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'diffs_by_index' => $diffsByIndex,
         ];
+    }
+
+    /**
+     * 生成分表过滤 SQL 片段
+     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
+     */
+    protected function splitTableFilter(): string
+    {
+        return $this->excludeSplitTables
+            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
+            : '';
     }
 }

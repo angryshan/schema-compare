@@ -62,18 +62,18 @@ class CkColumnsStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $key => $bRow) {
             if (!isset($liveMap[$key])) {
                 $onlyInBaseline[] = $key;
                 continue;
             }
-            $lRow  = $liveMap[$key];
+            $lRow = $liveMap[$key];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -96,26 +96,26 @@ class CkColumnsStrategy extends AbstractStrategy
         // 按表归组
         $diffsByTable = [];
         foreach ($onlyInBaseline as $key) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['only_in_baseline'][] = $key;
         }
         foreach ($onlyInLive as $key) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['only_in_live'][] = $key;
         }
         foreach ($changed as $key => $diffs) {
-            [$table,] = explode('.', $key, 2);
+            [$table] = explode('.', $key, 2);
             $diffsByTable[$table]['field_changed'][$key] = $diffs;
         }
 
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'      => $hasDiff,
-            'summary'       => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'diffs_by_table' => $diffsByTable,
         ];

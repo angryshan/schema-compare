@@ -4,6 +4,4 @@ declare(strict_types=1);
 
 namespace TxAdmin\SchemaCompare\Exceptions;
 
-class DriverNotFoundException extends SchemaCompareException
-{
-}
+class DriverNotFoundException extends SchemaCompareException {}

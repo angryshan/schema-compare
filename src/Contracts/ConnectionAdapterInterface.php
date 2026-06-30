@@ -14,7 +14,7 @@ interface ConnectionAdapterInterface
     /**
      * 执行 SQL 并返回行数组
      *
-     * @param  string $sql
+     * @param string $sql
      * @return array<int, array<string, mixed>>
      */
     public function query(string $sql): array;

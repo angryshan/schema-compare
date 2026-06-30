@@ -25,8 +25,8 @@ interface SchemaStrategyInterface
     /**
      * 查询目标数据库的该维度数据
      *
-     * @param  ConnectionAdapterInterface $adapter  DB 连接适配器（由驱动传入，策略无状态）
-     * @param  string                     $database 目标数据库名
+     * @param ConnectionAdapterInterface $adapter DB 连接适配器（由驱动传入，策略无状态）
+     * @param string $database 目标数据库名
      * @return array
      */
     public function fetchData(ConnectionAdapterInterface $adapter, string $database): array;
@@ -34,8 +34,8 @@ interface SchemaStrategyInterface
     /**
      * 对比基准与实时数据，返回差异报告
      *
-     * @param  array $baseline fetchData() 格式的基准数据
-     * @param  array $live     fetchData() 格式的实时数据
+     * @param array $baseline fetchData() 格式的基准数据
+     * @param array $live fetchData() 格式的实时数据
      * @return array{has_diff: bool, summary: array, ...}
      */
     public function diff(array $baseline, array $live): array;

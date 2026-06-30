@@ -23,6 +23,7 @@ class MysqlTableStrategy extends AbstractStrategy
      * @var bool
      */
     public bool $excludeSplitTables = true;
+
     public function getKey(): string
     {
         return 'tables';
@@ -56,17 +57,6 @@ class MysqlTableStrategy extends AbstractStrategy
     }
 
     /**
-     * 生成分表过滤 SQL 片段
-     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
-     */
-    protected function splitTableFilter(): string
-    {
-        return $this->excludeSplitTables
-            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
-            : '';
-    }
-
-    /**
      * diff key: "{table}"
      */
     public function diff(array $baseline, array $live): array
@@ -76,18 +66,18 @@ class MysqlTableStrategy extends AbstractStrategy
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap     = $this->buildMap($live, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
 
         $onlyInBaseline = [];
-        $onlyInLive     = [];
-        $changed        = [];
+        $onlyInLive = [];
+        $changed = [];
 
         foreach ($baselineMap as $table => $bRow) {
             if (!isset($liveMap[$table])) {
                 $onlyInBaseline[] = $table;
                 continue;
             }
-            $lRow  = $liveMap[$table];
+            $lRow = $liveMap[$table];
             $diffs = [];
             foreach ($this->compareFields as $field) {
                 $bVal = (string) ($bRow[$field] ?? '');
@@ -110,15 +100,26 @@ class MysqlTableStrategy extends AbstractStrategy
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
-            'has_diff'       => $hasDiff,
-            'summary'        => [
+            'has_diff' => $hasDiff,
+            'summary' => [
                 'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live'     => count($onlyInLive),
-                'field_changed'    => count($changed),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
             ],
             'only_in_baseline' => $onlyInBaseline,
-            'only_in_live'     => $onlyInLive,
-            'changed'          => $changed,
+            'only_in_live' => $onlyInLive,
+            'changed' => $changed,
         ];
+    }
+
+    /**
+     * 生成分表过滤 SQL 片段
+     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
+     */
+    protected function splitTableFilter(): string
+    {
+        return $this->excludeSplitTables
+            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
+            : '';
     }
 }

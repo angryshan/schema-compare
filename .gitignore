@@ -1,8 +1,9 @@
-/vendor/
+!.gitignore
+!.gitattributes
+*.DS_Store
+*.idea
+*.svn
+*.git
 composer.lock
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
+*.cache
+vendor

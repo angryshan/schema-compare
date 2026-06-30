@@ -21,8 +21,8 @@ class CkSchemaDriver extends AbstractSchemaDriver
 {
     /**
      * @param ConnectionAdapterInterface $adapter
-     * @param string                     $type       默认 'clickhouse'
-     * @param SchemaStrategyInterface[]  $strategies 为空时使用 defaultStrategies()
+     * @param string $type 默认 'clickhouse'
+     * @param SchemaStrategyInterface[] $strategies 为空时使用 defaultStrategies()
      */
     public function __construct(
         ConnectionAdapterInterface $adapter,
