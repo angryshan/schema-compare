@@ -6,6 +6,7 @@ namespace TxAdmin\SchemaCompare\Adapters;
 
 use think\facade\Db;
 use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
+use TxAdmin\SchemaCompare\Exceptions\SchemaCompareException;
 
 /**
  * ThinkPHP 6 适配器
@@ -26,6 +27,15 @@ class ThinkPHPAdapter implements ConnectionAdapterInterface
 
     public function query(string $sql): array
     {
-        return Db::connect($this->poolName)->query($sql);
+        $result = Db::connect($this->poolName)->query($sql);
+
+        // 防御：查询失败时框架可能返回 false 或非数组
+        if (!is_array($result)) {
+            throw new SchemaCompareException(
+                "SQL 查询返回非数组结果 (pool: {$this->poolName})，请检查连接或语法: " . substr($sql, 0, 100)
+            );
+        }
+
+        return $result;
     }
 }

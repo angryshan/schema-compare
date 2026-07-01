@@ -115,10 +115,29 @@ abstract class AbstractSchemaDriver
      *
      * @param array $baseline fetchStructure() 格式的基准数据
      * @param string $database 实时查询的目标库名
+     * @param string|null $expectedBaselineDb 可选：期望基准数据的库名，传入时校验一致性防止跨库对比
      * @return array diff 报告
+     * @throws SchemaCompareException 当库名不一致时抛出（仅 $expectedBaselineDb 非空时）
      */
-    public function compareFromArray(array $baseline, string $database): array
+    public function compareFromArray(array $baseline, string $database, ?string $expectedBaselineDb = null): array
     {
+        // 可选：校验基准数据是否来自同一库
+        if ($expectedBaselineDb !== null && !empty($baseline)) {
+            // 从任一策略结果中提取 database 字段作为基准库名
+            $baselineDbName = null;
+            foreach ($baseline as $rows) {
+                if (!empty($rows) && isset($rows[0]['database'])) {
+                    $baselineDbName = (string) $rows[0]['database'];
+                    break;
+                }
+            }
+            if ($baselineDbName !== null && $baselineDbName !== $expectedBaselineDb) {
+                throw new SchemaCompareException(
+                    "基准数据库名 '{$baselineDbName}' 与目标库 '{$expectedBaselineDb}' 不一致，可能存在跨库对比风险"
+                );
+            }
+        }
+
         $live = $this->fetchStructure($database);
         return $this->diff($baseline, $live);
     }
@@ -150,7 +169,8 @@ abstract class AbstractSchemaDriver
 
             $result = $strategy->diff($baselineData, $liveData);
 
-            if ($result['has_diff']) {
+            // 防御：自定义策略可能遗漏 has_diff 键
+            if (!empty($result['has_diff'])) {
                 $hasDiff = true;
             }
             $details[$key] = $result;
