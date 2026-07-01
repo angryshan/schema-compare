@@ -56,7 +56,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
                 COLLATION_NAME AS `collation_name`,
                 COLUMN_COMMENT AS `comment`
             FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = '{$database}'
+            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)}
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME, ORDINAL_POSITION
         ";
@@ -86,14 +86,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
                 continue;
             }
             $lRow = $liveMap[$key];
-            $diffs = [];
-            foreach ($this->compareFields as $field) {
-                $bVal = (string) ($bRow[$field] ?? '');
-                $lVal = (string) ($lRow[$field] ?? '');
-                if ($bVal !== $lVal) {
-                    $diffs[$field] = ['baseline' => $bVal, 'live' => $lVal];
-                }
-            }
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
             if (!empty($diffs)) {
                 $changed[$key] = $diffs;
             }

@@ -34,7 +34,7 @@ class CkProjectionsStrategy extends AbstractStrategy
                 `column` AS column_name,
                 `type`
             FROM system.projection_parts_columns
-            WHERE database = '{$database}' AND `active` = 1
+            WHERE database = {$this->quoteStringLiteral($database)} AND `active` = 1
             ORDER BY `database`, `table`, projection, column_name
         ";
         return $adapter->query($sql);
@@ -63,14 +63,7 @@ class CkProjectionsStrategy extends AbstractStrategy
                 continue;
             }
             $lRow = $liveMap[$key];
-            $diffs = [];
-            foreach ($this->compareFields as $field) {
-                $bVal = (string) ($bRow[$field] ?? '');
-                $lVal = (string) ($lRow[$field] ?? '');
-                if ($bVal !== $lVal) {
-                    $diffs[$field] = ['baseline' => $bVal, 'live' => $lVal];
-                }
-            }
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
             if (!empty($diffs)) {
                 $changed[$key] = $diffs;
             }

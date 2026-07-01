@@ -49,7 +49,7 @@ class MysqlTableStrategy extends AbstractStrategy
                 TABLE_COMMENT AS `table_comment`,
                 AUTO_INCREMENT AS `auto_increment`
             FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = '{$database}' AND TABLE_TYPE = 'BASE TABLE'
+            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)} AND TABLE_TYPE = 'BASE TABLE'
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME
         ";
@@ -78,14 +78,7 @@ class MysqlTableStrategy extends AbstractStrategy
                 continue;
             }
             $lRow = $liveMap[$table];
-            $diffs = [];
-            foreach ($this->compareFields as $field) {
-                $bVal = (string) ($bRow[$field] ?? '');
-                $lVal = (string) ($lRow[$field] ?? '');
-                if ($bVal !== $lVal) {
-                    $diffs[$field] = ['baseline' => $bVal, 'live' => $lVal];
-                }
-            }
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
             if (!empty($diffs)) {
                 $changed[$table] = $diffs;
             }

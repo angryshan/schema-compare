@@ -45,7 +45,7 @@ class CkColumnsStrategy extends AbstractStrategy
                     `is_in_partition_key`, `is_in_sorting_key`,
                     `is_in_primary_key`, `is_in_sampling_key`
             FROM system.columns
-            WHERE database = '{$database}'
+            WHERE database = {$this->quoteStringLiteral($database)}
             ORDER BY `database`, `table`, `position`
         ";
         return $adapter->query($sql);
@@ -74,14 +74,7 @@ class CkColumnsStrategy extends AbstractStrategy
                 continue;
             }
             $lRow = $liveMap[$key];
-            $diffs = [];
-            foreach ($this->compareFields as $field) {
-                $bVal = (string) ($bRow[$field] ?? '');
-                $lVal = (string) ($lRow[$field] ?? '');
-                if ($bVal !== $lVal) {
-                    $diffs[$field] = ['baseline' => $bVal, 'live' => $lVal];
-                }
-            }
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
             if (!empty($diffs)) {
                 $changed[$key] = $diffs;
             }

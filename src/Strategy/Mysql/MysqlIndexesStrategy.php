@@ -54,7 +54,7 @@ class MysqlIndexesStrategy extends AbstractStrategy
                 COLLATION AS `collation`,
                 SUB_PART AS `sub_part`
             FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = '{$database}'
+            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)}
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX
         ";
@@ -68,7 +68,7 @@ class MysqlIndexesStrategy extends AbstractStrategy
     public function diff(array $baseline, array $live): array
     {
         $keyFn = static function (array $row): string {
-            return $row['table'] . '.' . $row['index_name'] . '.' . $row['seq_in_index'];
+            return $row['table'] . '.' . $row['index_name'] . '.' . (string) $row['seq_in_index'];
         };
 
         $baselineMap = $this->buildMap($baseline, $keyFn);
@@ -84,14 +84,7 @@ class MysqlIndexesStrategy extends AbstractStrategy
                 continue;
             }
             $lRow = $liveMap[$key];
-            $diffs = [];
-            foreach ($this->compareFields as $field) {
-                $bVal = (string) ($bRow[$field] ?? '');
-                $lVal = (string) ($lRow[$field] ?? '');
-                if ($bVal !== $lVal) {
-                    $diffs[$field] = ['baseline' => $bVal, 'live' => $lVal];
-                }
-            }
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
             if (!empty($diffs)) {
                 $changed[$key] = $diffs;
             }
