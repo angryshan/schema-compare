@@ -7,6 +7,7 @@ namespace TxAdmin\SchemaCompare;
 use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 use TxAdmin\SchemaCompare\Contracts\SchemaStrategyInterface;
 use TxAdmin\SchemaCompare\Exceptions\InvalidBaselineException;
+use TxAdmin\SchemaCompare\Exceptions\SchemaCompareException;
 
 /**
  * 驱动基类
@@ -79,11 +80,17 @@ abstract class AbstractSchemaDriver
 
     /**
      * 将 fetchStructure() 结果序列化为 JSON
+     *
+     * @throws SchemaCompareException 当 JSON 编码失败时抛出
      */
     public function exportJson(string $database): string
     {
         $data = $this->fetchStructure($database);
-        return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        if ($json === false) {
+            throw new SchemaCompareException('JSON 编码失败: ' . json_last_error_msg());
+        }
+        return $json;
     }
 
     /**
@@ -121,12 +128,20 @@ abstract class AbstractSchemaDriver
      *
      * @param array $baseline fetchStructure() 格式的基准数据
      * @param array $live fetchStructure() 格式的实时数据
-     * @return array{has_diff: bool, details: array}
+     * @return array{has_diff: bool, details: array, warnings: array}
      */
     public function diff(array $baseline, array $live): array
     {
         $hasDiff = false;
         $details = [];
+        $warnings = [];
+
+        // 检测基准 JSON 中存在但当前驱动未注册的策略维度
+        $currentKeys = array_map(function ($s) { return $s->getKey(); }, $this->strategies);
+        $extraKeys = array_diff(array_keys($baseline), $currentKeys);
+        if (!empty($extraKeys)) {
+            $warnings[] = '基准数据包含当前驱动未注册的维度: ' . implode(', ', $extraKeys) . '，已跳过对比';
+        }
 
         foreach ($this->strategies as $strategy) {
             $key = $strategy->getKey();
@@ -144,6 +159,7 @@ abstract class AbstractSchemaDriver
         return [
             'has_diff' => $hasDiff,
             'details' => $details,
+            'warnings' => $warnings,
         ];
     }
 
