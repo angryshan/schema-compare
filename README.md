@@ -10,6 +10,7 @@
 - 🚀 支持 ClickHouse（字段、索引、投影）与 MySQL（字段、索引、表）结构对比
 - 🔧 策略可插拔，支持自定义对比字段与扩展新维度
 - 📦 提供 `SchemaCompareManager` 多驱动注册与 `DiffTranslator` 差异结果翻译
+- 🛠️ 内置 `SqlGenerator` SQL 生成器，支持 MySQL 和 ClickHouse 语法差异处理
 
 ## 环境要求
 
@@ -102,6 +103,46 @@ $translator = new DiffTranslator([
 
 $translated = $translator->translate($result['details']['columns'], '字段');
 ```
+
+### 6. SQL 生成器（支持 MySQL 和 ClickHouse）
+
+```php
+<?php
+
+use TxAdmin\SchemaCompare\Generator\SqlGenerator;
+
+// 创建 SQL 生成器实例
+$generator = new SqlGenerator('mysql'); // 或 'clickhouse'
+
+// 基础版：根据 diff 结果生成所有 SQL
+$sqls = $generator->generateAll($diffResult);
+
+// 精确版：传入 live 数据，生成更精确的 SQL
+$sqls = $generator->generatePreciseSql($diffResult, $liveData);
+
+// 合并所有 SQL 为一个字符串
+$allSql = $generator->combineSql($sqls);
+```
+
+#### 支持的操作类型：
+
+| 操作 | MySQL | ClickHouse |
+|------|-------|------------|
+| 添加列 | `ALTER TABLE ... ADD COLUMN` | `ALTER TABLE ... ADD COLUMN` (支持 CODEC) |
+| 删除列 | `ALTER TABLE ... DROP COLUMN` | `ALTER TABLE ... DROP COLUMN IF EXISTS` |
+| 修改列类型 | `ALTER TABLE ... MODIFY COLUMN` | 不支持直接修改，需先删后加 |
+| 修改列注释 | `ALTER TABLE ... MODIFY COLUMN ... COMMENT` | `ALTER TABLE ... MODIFY COLUMN COMMENT` |
+| 修改默认值 | `ALTER TABLE ... ALTER COLUMN SET DEFAULT` | `ALTER TABLE ... ALTER COLUMN DEFAULT` |
+| 创建索引 | `CREATE INDEX` | `ALTER TABLE ... ADD INDEX TYPE` |
+| 删除索引 | `ALTER TABLE ... DROP INDEX` | `ALTER TABLE ... DROP INDEX IF EXISTS` |
+| 删除表 | `DROP TABLE IF EXISTS` | `DROP TABLE IF EXISTS` |
+
+#### ClickHouse 特殊限制说明：
+
+1. **类型修改**：CK 不支持直接修改列类型，需要先删除再添加
+2. **压缩编码**：不支持在线修改，生成提示性 SQL 注释
+3. **表引擎**：不支持在线修改 ENGINE，需重建表
+4. **排序键/主键列**：不能删除属于排序键或主键的列
 
 ### 代码规范
 
