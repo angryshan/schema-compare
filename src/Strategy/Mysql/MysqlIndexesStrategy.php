@@ -54,7 +54,7 @@ class MysqlIndexesStrategy extends AbstractStrategy
                 COLLATION AS `collation`,
                 SUB_PART AS `sub_part`
             FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)}
+            WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)}
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX
         ";

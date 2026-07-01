@@ -49,7 +49,7 @@ class MysqlTableStrategy extends AbstractStrategy
                 TABLE_COMMENT AS `table_comment`,
                 AUTO_INCREMENT AS `auto_increment`
             FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)} AND TABLE_TYPE = 'BASE TABLE'
+            WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)} AND TABLE_TYPE = 'BASE TABLE'
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME
         ";

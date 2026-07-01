@@ -78,17 +78,6 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     }
 
     /**
-     * 转义数据库标识符并用反引号包裹
-     *
-     * @param string $database 数据库名
-     * @return string 如 `my_database`
-     */
-    protected function quoteDatabase(string $database): string
-    {
-        return '`' . $this->escapeIdentifier($database) . '`';
-    }
-
-    /**
      * 转义字符串字面量（ClickHouse WHERE database = '...'）
      */
     protected function quoteStringLiteral(string $value): string

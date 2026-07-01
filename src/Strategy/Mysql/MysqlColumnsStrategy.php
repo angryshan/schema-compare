@@ -56,7 +56,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
                 COLLATION_NAME AS `collation_name`,
                 COLUMN_COMMENT AS `comment`
             FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = {$this->quoteDatabase($database)}
+            WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)}
             {$this->splitTableFilter()}
             ORDER BY TABLE_NAME, ORDINAL_POSITION
         ";
