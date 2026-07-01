@@ -12,8 +12,8 @@ use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
  *
  * 用法：
  *   $adapter = new ThinkPHPAdapter('clickhouse');        // CK 连接
- *   $adapter = new ThinkPHPAdapter('mysql');             // MySQL 连接（默认）
- *   $adapter = new ThinkPHPAdapter();                    // 取 schema_compare.connection 配置
+ *   $adapter = new ThinkPHPAdapter('mysql');             // MySQL 连接
+ *   $adapter = new ThinkPHPAdapter();                    // 使用 'default' 连接（默认值）
  */
 class ThinkPHPAdapter implements ConnectionAdapterInterface
 {
