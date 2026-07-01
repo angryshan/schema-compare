@@ -6,6 +6,7 @@ namespace TxAdmin\SchemaCompare;
 
 use TxAdmin\SchemaCompare\Exceptions\DriverNotFoundException;
 use TxAdmin\SchemaCompare\Exceptions\InvalidBaselineException;
+use TxAdmin\SchemaCompare\Exceptions\SchemaCompareException;
 
 /**
  * 驱动注册中心
@@ -21,10 +22,20 @@ class SchemaCompareManager
 
     /**
      * 注册驱动
+     *
+     * @param AbstractSchemaDriver $driver
+     * @return self
+     * @throws SchemaCompareException 同 type 重复注册时抛出
      */
     public function register(AbstractSchemaDriver $driver): self
     {
-        $this->drivers[$driver->getType()] = $driver;
+        $type = $driver->getType();
+        if (isset($this->drivers[$type])) {
+            throw new SchemaCompareException(
+                "驱动类型 '{$type}' 已注册，不可重复覆盖（原有: " . get_class($this->drivers[$type]) . ', 新增: ' . get_class($driver) . '）'
+            );
+        }
+        $this->drivers[$type] = $driver;
         return $this;
     }
 
