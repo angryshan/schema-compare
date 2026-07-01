@@ -51,10 +51,16 @@ class DiffTranslator
      */
     public function translate(array $rawDiff, string $dimLabel): array
     {
+        // 统一返回结构：无论空还是非空，键名保持一致
         if (empty($rawDiff)) {
             return [
-                'has_diff' => false,
-                'summary' => [],
+                '是否有不同' => false,
+                '对比维度' => $dimLabel,
+                '总结' => [
+                    ($this->diffTypeMap['only_in_baseline'] ?? '基准有线上无') => 0,
+                    ($this->diffTypeMap['only_in_live'] ?? '线上有基准无') => 0,
+                    ($this->diffTypeMap['field_changed'] ?? '属性变化') => 0,
+                ],
                 '明细' => [],
             ];
         }
@@ -65,9 +71,9 @@ class DiffTranslator
             '是否有不同' => $rawDiff['has_diff'] ?? false,
             '对比维度' => $dimLabel,
             '总结' => [
-                ($this->diffTypeMap['only_in_baseline'] ?? 'only_in_baseline') => $summary['only_in_baseline'] ?? 0,
-                ($this->diffTypeMap['only_in_live'] ?? 'only_in_live') => $summary['only_in_live'] ?? 0,
-                ($this->diffTypeMap['field_changed'] ?? 'field_changed') => $summary['field_changed'] ?? 0,
+                ($this->diffTypeMap['only_in_baseline'] ?? '基准有线上无') => $summary['only_in_baseline'] ?? 0,
+                ($this->diffTypeMap['only_in_live'] ?? '线上有基准无') => $summary['only_in_live'] ?? 0,
+                ($this->diffTypeMap['field_changed'] ?? '属性变化') => $summary['field_changed'] ?? 0,
             ],
             '明细' => $this->translateDetails($rawDiff, $dimLabel),
         ];
@@ -104,10 +110,16 @@ class DiffTranslator
         foreach ($groupedData as $key => $item) {
             $translated = [];
             foreach ($this->diffTypeMap as $en => $zh) {
-                if (!empty($item[$en])) {
-                    $translated[$zh] = ($en === 'field_changed' || $en === 'changed')
-                        ? $this->translateFieldChanges($item[$en], $labels)
-                        : $item[$en];
+                if (empty($item[$en])) {
+                    continue;
+                }
+                $value = ($en === 'field_changed' || $en === 'changed')
+                    ? $this->translateFieldChanges($item[$en], $labels)
+                    : $item[$en];
+                if ($en === 'changed' && isset($translated[$zh])) {
+                    $translated[$zh] = array_merge((array) $translated[$zh], (array) $value);
+                } else {
+                    $translated[$zh] = $value;
                 }
             }
             if (!empty($translated)) {
@@ -140,7 +152,10 @@ class DiffTranslator
     /**
      * 翻译字段变化详情
      *
-     * @param array $changes 字段变化数据 ['field_name' => ['attr' => ['old', 'new'], ...]]
+     * 输入格式：['field_name' => ['attr' => ['baseline' => '...', 'live' => '...'], ...]]
+     * 输出格式：['field_name' => ['属性中文名' => ['基准值' => '...', '线上值' => '...'], ...]]
+     *
+     * @param array $changes 字段变化数据
      * @param array $labels 属性名映射 ['attr' => '中文名', ...]
      * @return array 翻译后的数据
      */
@@ -150,7 +165,16 @@ class DiffTranslator
         foreach ($changes as $name => $diffs) {
             $translated = [];
             foreach ($diffs as $attr => $values) {
-                $translated[$labels[$attr] ?? $attr] = $values;
+                // 将 baseline/live 键名翻译为中文
+                if (is_array($values)) {
+                    $translated[$labels[$attr] ?? $attr] = [
+                        '基准值' => $values['baseline'] ?? '',
+                        '线上值' => $values['live'] ?? '',
+                    ];
+                } else {
+                    // 兼容非标准格式（如测试数据）
+                    $translated[$labels[$attr] ?? $attr] = $values;
+                }
             }
             $result[$name] = $translated;
         }

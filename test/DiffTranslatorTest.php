@@ -14,8 +14,9 @@ class DiffTranslatorTest extends TestCase
         $translator = new DiffTranslator();
         $result = $translator->translate([], '字段');
 
-        $this->assertFalse($result['has_diff']);
-        $this->assertSame([], $result['summary']);
+        $this->assertFalse($result['是否有不同']);
+        $this->assertSame('字段', $result['对比维度']);
+        $this->assertSame(0, $result['总结']['基准有线上无']);
         $this->assertSame([], $result['明细']);
     }
 
@@ -37,8 +38,8 @@ class DiffTranslatorTest extends TestCase
             'diffs_by_table' => [
                 'users' => [
                     'field_changed' => [
-                        'name' => [
-                            'type' => ['String', 'Int32'],
+                        'users.name' => [
+                            'type' => ['baseline' => 'String', 'live' => 'Int32'],
                         ],
                     ],
                 ],
@@ -51,6 +52,9 @@ class DiffTranslatorTest extends TestCase
         $this->assertSame('字段', $result['对比维度']);
         $this->assertSame(1, $result['总结']['属性变化']);
         $this->assertArrayHasKey('users', $result['明细']);
-        $this->assertSame(['String', 'Int32'], $result['明细']['users']['属性变化']['name']['类型']);
+        $this->assertSame(
+            ['基准值' => 'String', '线上值' => 'Int32'],
+            $result['明细']['users']['属性变化']['users.name']['类型']
+        );
     }
 }
