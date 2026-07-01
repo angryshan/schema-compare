@@ -78,7 +78,15 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     }
 
     /**
-     * 转义字符串字面量（ClickHouse WHERE database = '...'）
+     * 转义字符串字面量（WHERE / TABLE_SCHEMA 等值比较场景）
+     *
+     * MySQL 和 ClickHouse 均适用：
+     *   - MySQL:  WHERE TABLE_SCHEMA = 'xm2_center'
+     *   - CK:     WHERE database = 'xm2_center'
+     *
+     * 规则：
+     *   - 先通过 escapeIdentifier 过滤危险字符（只保留字母/数字/_/-/$）
+     *   - 再用单引号包裹，内部单引号转义为两个单引号
      */
     protected function quoteStringLiteral(string $value): string
     {
@@ -94,7 +102,6 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     /**
      * 归一化字段值用于比较
      *
-     * 问题12修复：
      *   - information_schema 中 NULL 和空串语义不同，但 (string) null => ''
      *   - 如果一侧返回 NULL、另一侧返回 ''，直接强转后都是 ''，差异被吞掉
      *   - 此方法将原始 null 统一转为空串，保持行为一致性
