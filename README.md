@@ -9,7 +9,7 @@
 - ✨ 框架无关核心，提供 ThinkPHP / Hyperf 连接适配器
 - 🚀 支持 ClickHouse（字段、索引、投影）与 MySQL（字段、索引、表）结构对比
 - 🔧 策略可插拔，支持自定义对比字段与扩展新维度
-- 📦 提供 `SchemaCompareManager` 多驱动注册与 `DiffTranslator` 差异结果翻译
+- 📦 提供 `SchemaCompareManager` 多驱动注册
 - 🛠️ 内置 `SqlGenerator` SQL 生成器，支持 MySQL 和 ClickHouse 语法差异处理
 
 ## 环境要求
@@ -86,25 +86,7 @@ $manager->register(new MysqlSchemaDriver(new ThinkPHPAdapter('default')));
 $result = $manager->compareFromJson('clickhouse', $jsonBaseline, $database);
 ```
 
-### 5. 差异结果翻译
-
-```php
-<?php
-
-use TxAdmin\SchemaCompare\Translator\DiffTranslator;
-
-$translator = new DiffTranslator([
-    'columns' => [
-        'type'           => '类型',
-        'is_nullable'    => '可空',
-        'column_default' => '默认值',
-    ],
-]);
-
-$translated = $translator->translate($result['details']['columns'], '字段');
-```
-
-### 6. SQL 生成器（支持 MySQL 和 ClickHouse）
+### 5. SQL 生成器（支持 MySQL 和 ClickHouse）
 
 ```php
 <?php
