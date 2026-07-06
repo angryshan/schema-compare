@@ -93,10 +93,15 @@ class SchemaCompareManager
     /**
      * 比较数组基准 vs 实时数据
      *
+     * @param string $type 驱动类型
+     * @param array $baseline 基准数据
+     * @param string $database 目标库名
+     * @param string|null $expectedBaselineDb 期望的基准库名（可选，用于强制校验）
      * @throws DriverNotFoundException
+     * @throws SchemaCompareException 库名不一致时抛出
      */
-    public function compareFromArray(string $type, array $baseline, string $database): array
+    public function compareFromArray(string $type, array $baseline, string $database, ?string $expectedBaselineDb = null): array
     {
-        return $this->driver($type)->compareFromArray($baseline, $database);
+        return $this->driver($type)->compareFromArray($baseline, $database, $expectedBaselineDb);
     }
 }

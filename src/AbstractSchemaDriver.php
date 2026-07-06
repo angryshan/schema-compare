@@ -115,27 +115,23 @@ abstract class AbstractSchemaDriver
      *
      * @param array $baseline fetchStructure() 格式的基准数据
      * @param string $database 实时查询的目标库名
-     * @param string|null $expectedBaselineDb 可选：期望基准数据的库名，传入时校验一致性防止跨库对比
+     * @param string|null $expectedBaselineDb 可选：期望基准数据的库名，不传则自动从 baseline 提取并校验
      * @return array diff 报告
-     * @throws SchemaCompareException 当库名不一致时抛出（仅 $expectedBaselineDb 非空时）
+     * @throws SchemaCompareException 当库名不一致时抛出
      */
     public function compareFromArray(array $baseline, string $database, ?string $expectedBaselineDb = null): array
     {
-        // 可选：校验基准数据是否来自同一库
-        if ($expectedBaselineDb !== null && !empty($baseline)) {
-            // 从任一策略结果中提取 database 字段作为基准库名
-            $baselineDbName = null;
-            foreach ($baseline as $rows) {
-                if (!empty($rows) && isset($rows[0]['database'])) {
-                    $baselineDbName = (string) $rows[0]['database'];
-                    break;
-                }
-            }
-            if ($baselineDbName !== null && $baselineDbName !== $expectedBaselineDb) {
-                throw new SchemaCompareException(
-                    "基准数据库名 '{$baselineDbName}' 与目标库 '{$expectedBaselineDb}' 不一致，可能存在跨库对比风险"
-                );
-            }
+        // 自动提取基准库名（多维度检查，不依赖第一个维度）
+        $baselineDbName = $this->extractDatabaseFromBaseline($baseline);
+
+        // 确定期望的基准库名
+        $expectedDb = $expectedBaselineDb ?? $baselineDbName;
+
+        // 校验：基准库名 vs 线上查询目标库名
+        if ($expectedDb !== null && $expectedDb !== $database) {
+            throw new SchemaCompareException(
+                "基准数据库名 '{$expectedDb}' 与线上查询目标库 '{$database}' 不一致，可能存在跨库对比风险"
+            );
         }
 
         $live = $this->fetchStructure($database);
@@ -181,6 +177,21 @@ abstract class AbstractSchemaDriver
             'details' => $details,
             'warnings' => $warnings,
         ];
+    }
+
+    // ----------------------------------------------------------------
+    // 辅助方法
+    // ----------------------------------------------------------------
+
+    /**
+     * 从基准数据中提取数据库名（多维度检查）
+     *
+     * @param array $baseline fetchStructure() 格式的基准数据
+     * @return string|null 提取到的库名，未找到返回 null
+     */
+    protected function extractDatabaseFromBaseline(array $baseline): ?string
+    {
+        return \TxAdmin\SchemaCompare\Util\StructureUtil::extractDatabase($baseline);
     }
 
     // ----------------------------------------------------------------
