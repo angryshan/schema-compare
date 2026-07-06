@@ -55,9 +55,9 @@ class SqlGenerator implements SqlGeneratorInterface
         return $this->delegate->generateTableSql($tableDiff);
     }
 
-    public function generatePreciseSql(array $diffResult, array $liveData): array
+    public function generatePreciseSql(array $diffResult, array $liveData, array $baselineData = []): array
     {
-        return $this->delegate->generatePreciseSql($diffResult, $liveData);
+        return $this->delegate->generatePreciseSql($diffResult, $liveData, $baselineData);
     }
 
     public function combineSql(array $sqlGroups, string $separator = "\n\n"): string

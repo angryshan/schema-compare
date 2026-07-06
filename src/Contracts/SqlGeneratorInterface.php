@@ -44,13 +44,16 @@ interface SqlGeneratorInterface
     public function generateTableSql(array $tableDiff): array;
 
     /**
-     * 根据带 live 完整数据的 diff 生成精确 SQL
+     * 根据带完整数据的 diff 生成精确 SQL
+     *
+     * 导出的 SQL 在线上库执行，让线上对齐基准。
      *
      * @param array $diffResult diff 结果
      * @param array $liveData 线上实时数据（fetchStructure 返回格式）
+     * @param array $baselineData 基准数据（fetchStructure 返回格式），用于生成 ADD/MODIFY 的完整定义
      * @return array<string, array>
      */
-    public function generatePreciseSql(array $diffResult, array $liveData): array;
+    public function generatePreciseSql(array $diffResult, array $liveData, array $baselineData = []): array;
 
     /**
      * 将所有 SQL 合并为一个字符串

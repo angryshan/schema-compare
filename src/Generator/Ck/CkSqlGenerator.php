@@ -8,6 +8,9 @@ use TxAdmin\SchemaCompare\Generator\AbstractSqlGenerator;
 
 /**
  * ClickHouse SQL 生成器
+ *
+ * SQL 方向：导出的 SQL 在线上库执行，让线上对齐基准。
+ * CK 的分区键/排序键变更通常需要重建表，因此以 warn 提示为主。
  */
 class CkSqlGenerator extends AbstractSqlGenerator
 {
@@ -19,22 +22,25 @@ class CkSqlGenerator extends AbstractSqlGenerator
             'warn' => [],
         ];
 
+        // only_in_baseline: 基准有表、线上无 -> 线上需 CREATE TABLE
         if (!empty($indexDiff['only_in_baseline'])) {
             foreach ($indexDiff['only_in_baseline'] as $tableName) {
-                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于基准库，请检查是否需要 DROP TABLE";
+                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于基准库（线上缺失），线上需 CREATE TABLE";
             }
         }
+        // only_in_live: 线上有表、基准无 -> 线上需 DROP TABLE
         if (!empty($indexDiff['only_in_live'])) {
             foreach ($indexDiff['only_in_live'] as $tableName) {
-                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于线上库，请检查是否需要 CREATE TABLE";
+                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于线上库（基准缺失），线上需 DROP TABLE";
             }
         }
         if (!empty($indexDiff['changed'])) {
             foreach ($indexDiff['changed'] as $tableName => $changes) {
                 foreach ($changes as $attr => $val) {
-                    $old = $val['baseline'] ?? '';
-                    $new = $val['live'] ?? '';
-                    $result['warn'][] = "-- [CK] 表 `{$tableName}` 的 {$attr} 发生变化: {$old} -> {$new} (分区键/排序键变更需重建表)";
+                    // 线上对齐基准：原值=线上值，目标值=基准值
+                    $old = $val['live'] ?? '';
+                    $new = $val['baseline'] ?? '';
+                    $result['warn'][] = "-- [CK] 表 `{$tableName}` 的 {$attr} 需由线上值 '{$old}' 同步为基准值 '{$new}' (分区键/排序键变更需重建表)";
                 }
             }
         }
@@ -42,19 +48,55 @@ class CkSqlGenerator extends AbstractSqlGenerator
         return $result;
     }
 
-    protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes): array
+    protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
     {
+        // 整表缺失的表由 columns 维度统一处理，indexes 维度跳过避免重复 warn
+        if (!empty($missingTables)) {
+            $indexDiff = $this->filterMissingTablesFromCkIndexDiff($indexDiff, $missingTables);
+        }
+
         return $this->generateIndexSql($indexDiff);
     }
 
-    protected function buildAddColumnSql(string $table, array $liveRow): string
+    /**
+     * 从 CK indexes 维度的平铺 diff 中移除整表缺失的表
+     *
+     * CK indexes 结构为平铺：only_in_baseline / only_in_live / changed
+     */
+    protected function filterMissingTablesFromCkIndexDiff(array $indexDiff, array $missingTables): array
     {
-        $name = $liveRow['name'] ?? '';
-        $type = $liveRow['type'] ?? 'String';
+        if (!empty($indexDiff['only_in_baseline'])) {
+            $indexDiff['only_in_baseline'] = array_values(array_filter(
+                $indexDiff['only_in_baseline'],
+                fn ($t) => !isset($missingTables[$t])
+            ));
+        }
+        if (!empty($indexDiff['only_in_live'])) {
+            $indexDiff['only_in_live'] = array_values(array_filter(
+                $indexDiff['only_in_live'],
+                fn ($t) => !isset($missingTables[$t])
+            ));
+        }
+        if (!empty($indexDiff['changed'])) {
+            foreach ($missingTables as $table => $_) {
+                unset($indexDiff['changed'][$table]);
+            }
+        }
+
+        return $indexDiff;
+    }
+
+    /**
+     * 用行数据生成完整的 ADD COLUMN 语句（线上对齐基准时传入基准行）
+     */
+    protected function buildAddColumnSql(string $table, array $row): string
+    {
+        $name = $row['name'] ?? '';
+        $type = $row['type'] ?? 'String';
 
         $default = '';
-        $defaultKind = $liveRow['default_kind'] ?? '';
-        $defaultExpr = $liveRow['default_expression'] ?? '';
+        $defaultKind = $row['default_kind'] ?? '';
+        $defaultExpr = $row['default_expression'] ?? '';
 
         if ($defaultKind === 'DEFAULT' && $defaultExpr !== '') {
             $default = " DEFAULT {$defaultExpr}";
@@ -64,11 +106,11 @@ class CkSqlGenerator extends AbstractSqlGenerator
             $default = " ALIAS {$defaultExpr}";
         }
 
-        $codec = !empty($liveRow['compression_codec'])
-            ? " CODEC({$liveRow['compression_codec']})"
+        $codec = !empty($row['compression_codec'])
+            ? " CODEC({$row['compression_codec']})"
             : '';
-        $comment = !empty($liveRow['comment'])
-            ? " COMMENT '" . addslashes($liveRow['comment']) . "'"
+        $comment = !empty($row['comment'])
+            ? " COMMENT '" . addslashes($row['comment']) . "'"
             : '';
 
         return "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$default}{$codec}{$comment};";
@@ -89,8 +131,9 @@ class CkSqlGenerator extends AbstractSqlGenerator
         $sqls = [];
 
         foreach ($changes as $attr => $values) {
-            $oldVal = $values['baseline'] ?? '';
-            $newVal = $values['live'] ?? '';
+            // 线上对齐基准：目标值=基准值，原值=线上值
+            $oldVal = $values['live'] ?? '';
+            $newVal = $values['baseline'] ?? '';
 
             switch ($attr) {
                 case 'type':
@@ -120,9 +163,14 @@ class CkSqlGenerator extends AbstractSqlGenerator
         return $sqls;
     }
 
-    protected function buildPreciseModifySql(string $table, string $fieldName, array $changes, ?array $liveRow): array
+    /**
+     * 精确路径：有基准行时，CK 类型变更需先删后加（用基准定义重建）
+     *
+     * @param array|null $targetRow 基准行数据
+     */
+    protected function buildPreciseModifySql(string $table, string $fieldName, array $changes, ?array $targetRow): array
     {
-        if (!$liveRow) {
+        if (!$targetRow) {
             return $this->buildModifyColumnSql($table, $fieldName, $changes);
         }
 
@@ -130,7 +178,7 @@ class CkSqlGenerator extends AbstractSqlGenerator
             return [
                 '-- CK 类型变更需要先删后加',
                 "ALTER TABLE `{$table}` DROP COLUMN IF EXISTS `{$fieldName}`;",
-                $this->buildAddColumnSql($table, $liveRow),
+                $this->buildAddColumnSql($table, $targetRow),
             ];
         }
 
@@ -144,13 +192,14 @@ class CkSqlGenerator extends AbstractSqlGenerator
 
     protected function buildCreateTablePlaceholderSql(string $tableName): string
     {
-        return "-- TODO: CREATE TABLE `{$tableName}` (...) (需补充完整建表语句)";
+        return "-- TODO: CREATE TABLE `{$tableName}` (...) (整表缺失，需人工确认完整建表语句)";
     }
 
     protected function buildAlterTableSql(string $table, string $attr, array $change): array
     {
-        $oldVal = $change['baseline'] ?? '';
-        $newVal = $change['live'] ?? '';
+        // 线上对齐基准：目标值=基准值，原值=线上值
+        $oldVal = $change['live'] ?? '';
+        $newVal = $change['baseline'] ?? '';
 
         switch ($attr) {
             case 'engine':
@@ -163,7 +212,7 @@ class CkSqlGenerator extends AbstractSqlGenerator
                 ];
             case 'comment':
             case 'table_comment':
-                return ["ALTER TABLE `{$table}` MODIFY COMMENT '{$newVal}'; -- 原: {$oldVal}"];
+                return ["ALTER TABLE `{$table}` MODIFY COMMENT='{$newVal}'; -- 原: {$oldVal}"];
             default:
                 return ["-- ALTER TABLE `{$table}` SET {$attr}={$newVal} (原: {$oldVal}) [CK 可能不支持]"];
         }
