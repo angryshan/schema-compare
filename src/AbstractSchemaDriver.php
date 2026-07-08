@@ -64,6 +64,22 @@ abstract class AbstractSchemaDriver
     }
 
     /**
+     * 统一设置所有策略的宽松比较开关
+     *
+     * @param bool $loose true=开启宽松比较（默认，trim空白/折叠空格/统一破折号），false=严格逐字符比较
+     * @return $this
+     */
+    public function setLooseComparison(bool $loose): self
+    {
+        foreach ($this->strategies as $strategy) {
+            if (property_exists($strategy, 'looseComparison')) {
+                $strategy->looseComparison = $loose;
+            }
+        }
+        return $this;
+    }
+
+    /**
      * 查询目标库所有策略的结构数据
      *
      * @param string $database 目标库名
