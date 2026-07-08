@@ -32,39 +32,4 @@ class StructureUtil
         return null;
     }
 
-    /**
-     * 获取结构中的所有表名
-     *
-     * @param array $structure 结构数据
-     * @return array 表名列表（去重）
-     */
-    public static function extractTables(array $structure): array
-    {
-        $tables = [];
-        foreach ($structure as $dimension => $items) {
-            if (!is_array($items)) {
-                continue;
-            }
-            foreach ($items as $item) {
-                $tableName = $item['table'] ?? ($item['table_name'] ?? ($item['TABLE_NAME'] ?? ''));
-                if ($tableName !== '') {
-                    $tables[] = $tableName;
-                }
-            }
-        }
-        return array_unique($tables);
-    }
-
-    /**
-     * 检查结构是否为空（所有维度都为空）
-     */
-    public static function isEmpty(array $structure): bool
-    {
-        foreach ($structure as $items) {
-            if (is_array($items) && !empty($items)) {
-                return false;
-            }
-        }
-        return true;
-    }
 }
