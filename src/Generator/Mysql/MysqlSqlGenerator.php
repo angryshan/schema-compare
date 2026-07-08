@@ -114,31 +114,8 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             return $result;
         }
 
-        foreach ($indexDiff['diffs_by_table'] ?? [] as $table => $diff) {
-            // 整表缺失：表级 DDL 由 columns 维度生成，跳过索引级
-            if (isset($missingTables[$table])) {
-                continue;
-            }
-
-            // only_in_live: 线上有、基准无 -> 线上 DROP INDEX
-            if (!empty($diff['only_in_live'])) {
-                foreach ($diff['only_in_live'] as $idxInfo) {
-                    $idxName = is_array($idxInfo) ? ($idxInfo['index_name'] ?? $idxInfo[0]) : $idxInfo;
-                    $result['drop'][] = $this->buildDropIndexSql($table, (string) $idxName);
-                }
-            }
-
-            // only_in_baseline: 基准有、线上无 -> 线上 CREATE INDEX（用基准定义）
-            if (!empty($diff['only_in_baseline'])) {
-                foreach ($diff['only_in_baseline'] as $idxInfo) {
-                    $idxName = is_array($idxInfo) ? ($idxInfo['index_name'] ?? $idxInfo[0]) : $idxInfo;
-                    $baselineRows = $baselineMap[$table . '.' . $idxName] ?? null;
-                    $result['create'][] = $baselineRows
-                        ? $this->buildCreateCompositeIndex($table, (string) $idxName, $baselineRows)
-                        : "-- TODO: CREATE INDEX `{$idxName}` ON `{$table}`";
-                }
-            }
-        }
+        // MySQL indexes 维度统一使用 diffs_by_index 结构（key=table.index_name）
+        // diffs_by_table 分支为旧兼容代码，已删除
 
         return $result;
     }
@@ -148,33 +125,18 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
      */
     protected function buildAddColumnSql(string $table, array $row): string
     {
-        $type = $row['type'] ?? '';
-        $nullable = ($row['is_nullable'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-        
-        // 处理默认值：column_default 为 null 表示没有默认值，空字符串 '' 表示默认值为空字符串
-        $default = '';
-        if ($row['column_default'] !== null) {
-            if ($row['column_default'] === 'NULL') {
-                $default = ' DEFAULT NULL';
-            } else {
-                $default = " DEFAULT '" . addslashes($row['column_default']) . "'";
-            }
-        }
-        
-        $comment = !empty($row['comment'])
-            ? " COMMENT '" . addslashes($row['comment']) . "'"
-            : '';
-        $extra = !empty($row['extra']) ? ' ' . $row['extra'] : '';
-        $charset = !empty($row['character_set_name'])
-            ? " CHARACTER SET {$row['character_set_name']}"
-            : '';
-        $collation = !empty($row['collation_name'])
-            ? " COLLATE {$row['collation_name']}"
-            : '';
         $name = $row['name'] ?? $row['column_name'] ?? '';
+        $colDef = $this->buildColumnDefinition($row);
+        $sql = "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$colDef};";
 
-        // MySQL 列定义顺序：type → charset/collation → nullable → default → extra → comment
-        return "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$charset}{$collation}{$nullable}{$default}{$extra}{$comment};";
+        // auto_increment 列在 MySQL 中必须定义为键（PRIMARY KEY 或 UNIQUE KEY）
+        // 由于目标表可能已有主键，自动追加会导致执行失败，此处仅加 TODO 提醒人工确认
+        $extra = $row['extra'] ?? '';
+        if (stripos($extra, 'auto_increment') !== false) {
+            $sql .= " -- TODO: 该列为 auto_increment，需定义为主键或唯一键，请确认目标表是否已有主键后再执行";
+        }
+
+        return $sql;
     }
 
     protected function buildAddColumnPlaceholderSql(string $table, string $fieldName): string
@@ -275,9 +237,34 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
      */
     protected function buildModifyColumnFromRowSql(string $table, array $row): string
     {
+        $name = $row['name'] ?? $row['column_name'] ?? '';
+        $colDef = $this->buildColumnDefinition($row);
+        $sql = "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$colDef};";
+
+        // auto_increment 列在 MySQL 中必须定义为键（PRIMARY KEY 或 UNIQUE KEY）
+        // 由于目标表可能已有主键，自动追加会导致执行失败，此处仅加 TODO 提醒人工确认
+        $extra = $row['extra'] ?? '';
+        if (stripos($extra, 'auto_increment') !== false) {
+            $sql .= " -- TODO: 该列为 auto_increment，需定义为主键或唯一键，请确认目标表是否已有主键后再执行";
+        }
+
+        return $sql;
+    }
+
+    /**
+     * 从行数据构建 MySQL 列定义片段（不含列名和 ALTER 语句外壳）
+     *
+     * MySQL 列定义语法顺序：
+     *   type [CHARACTER SET ...] [COLLATE ...] [NOT NULL] [DEFAULT ...] [extra] [COMMENT ...]
+     *
+     * @param array $row information_schema.COLUMNS 行数据
+     * @return string 列定义片段，如 "int(11) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键'"
+     */
+    protected function buildColumnDefinition(array $row): string
+    {
         $type = $row['type'] ?? '';
         $nullable = ($row['is_nullable'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-        
+
         // 处理默认值：column_default 为 null 表示没有默认值，空字符串 '' 表示默认值为空字符串
         $default = '';
         if ($row['column_default'] !== null) {
@@ -287,7 +274,7 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
                 $default = " DEFAULT '" . addslashes($row['column_default']) . "'";
             }
         }
-        
+
         $comment = !empty($row['comment'])
             ? " COMMENT '" . addslashes($row['comment']) . "'"
             : '';
@@ -298,10 +285,8 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         $collation = !empty($row['collation_name'])
             ? " COLLATE {$row['collation_name']}"
             : '';
-        $name = $row['name'] ?? $row['column_name'] ?? '';
 
-        // MySQL 列定义顺序：type → charset/collation → nullable → default → extra → comment
-        return "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$type}{$charset}{$collation}{$nullable}{$default}{$extra}{$comment};";
+        return "{$type}{$charset}{$collation}{$nullable}{$default}{$extra}{$comment}";
     }
 
     protected function buildDropIndexSql(string $table, string $indexName): string

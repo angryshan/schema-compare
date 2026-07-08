@@ -90,6 +90,11 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
         return $result;
     }
 
+    /**
+     * 生成表级差异 SQL（CREATE TABLE / DROP TABLE / ALTER TABLE）
+     *
+     * 所有策略统一使用 diffs_by_table 结构
+     */
     public function generateTableSql(array $tableDiff): array
     {
         $result = [
@@ -98,38 +103,33 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
             'drop' => [],
         ];
 
-        $diffsByTable = $tableDiff['diffs_by_table'] ?? [];
-        if (!empty($diffsByTable)) {
-            foreach ($diffsByTable as $table => $diff) {
-                $this->appendTableDiffSql($result, $table, $diff);
-            }
-
-            return $result;
-        }
-
-        // only_in_baseline: 基准有表、线上无 -> 线上 CREATE TABLE（占位）
-        foreach ($tableDiff['only_in_baseline'] ?? [] as $tableName) {
-            $t = is_array($tableName) ? ($tableName[0] ?? $tableName) : $tableName;
-            $result['create'][] = $this->buildCreateTablePlaceholderSql((string) $t);
-        }
-
-        // only_in_live: 线上有表、基准无 -> 线上 DROP TABLE
-        foreach ($tableDiff['only_in_live'] ?? [] as $tableName) {
-            $result['drop'][] = $this->buildDropTableSql((string) $tableName);
-        }
-
-        foreach ($tableDiff['changed'] ?? [] as $tableName => $attrs) {
-            if (!is_array($attrs)) {
-                continue;
-            }
-            foreach ($attrs as $attr => $change) {
-                if (!is_array($change)) {
-                    continue;
+        foreach ($tableDiff['diffs_by_table'] ?? [] as $table => $diff) {
+            // only_in_baseline: 基准有表、线上无 -> 线上 CREATE TABLE（占位）
+            if (!empty($diff['only_in_baseline'])) {
+                foreach ($diff['only_in_baseline'] as $tableName) {
+                    $t = is_array($tableName) ? ($tableName[0] ?? $tableName) : $tableName;
+                    $result['create'][] = $this->buildCreateTablePlaceholderSql((string) $t);
                 }
-                $result['alter'] = array_merge(
-                    $result['alter'],
-                    $this->buildAlterTableSql((string) $tableName, (string) $attr, $change)
-                );
+            }
+
+            // only_in_live: 线上有表、基准无 -> 线上 DROP TABLE
+            if (!empty($diff['only_in_live'])) {
+                foreach ($diff['only_in_live'] as $tableName) {
+                    $result['drop'][] = $this->buildDropTableSql((string) $tableName);
+                }
+            }
+
+            // field_changed: 表属性变更 -> ALTER TABLE
+            if (!empty($diff['field_changed'])) {
+                foreach ($diff['field_changed'] as $attr => $change) {
+                    if (!is_array($change)) {
+                        continue;
+                    }
+                    $result['alter'] = array_merge(
+                        $result['alter'],
+                        $this->buildAlterTableSql($table, (string) $attr, $change)
+                    );
+                }
             }
         }
 
@@ -334,79 +334,27 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
     {
         $result = ['alter' => [], 'create' => [], 'drop' => []];
 
-        // diffs_by_table 结构（兼容分组策略）
-        $diffsByTable = $tableDiff['diffs_by_table'] ?? [];
-        if (!empty($diffsByTable)) {
-            foreach ($diffsByTable as $table => $diff) {
-                if (isset($missingTables[$table])) {
-                    continue; // 整表缺失，表级 DDL 由 columns 维度生成
-                }
-                if (!empty($diff['field_changed'])) {
-                    foreach ($diff['field_changed'] as $attr => $change) {
-                        if (!is_array($change)) {
-                            continue;
-                        }
-                        $result['alter'] = array_merge(
-                            $result['alter'],
-                            $this->buildAlterTableSql($table, (string) $attr, $change)
-                        );
+        foreach ($tableDiff['diffs_by_table'] ?? [] as $table => $diff) {
+            // 整表缺失，表级 DDL 由 columns 维度生成
+            if (isset($missingTables[$table])) {
+                continue;
+            }
+
+            // 仅处理属性变更（field_changed）
+            if (!empty($diff['field_changed'])) {
+                foreach ($diff['field_changed'] as $attr => $change) {
+                    if (!is_array($change)) {
+                        continue;
                     }
+                    $result['alter'] = array_merge(
+                        $result['alter'],
+                        $this->buildAlterTableSql($table, (string) $attr, $change)
+                    );
                 }
-            }
-
-            return $result;
-        }
-
-        // 平铺结构：整表缺失由 columns 维度处理，此处仅生成 changed（属性变更）
-        foreach ($tableDiff['changed'] ?? [] as $tableName => $attrs) {
-            if (!is_array($attrs)) {
-                continue;
-            }
-            if (isset($missingTables[(string) $tableName])) {
-                continue;
-            }
-            foreach ($attrs as $attr => $change) {
-                if (!is_array($change)) {
-                    continue;
-                }
-                $result['alter'] = array_merge(
-                    $result['alter'],
-                    $this->buildAlterTableSql((string) $tableName, (string) $attr, $change)
-                );
             }
         }
 
         return $result;
-    }
-
-    protected function appendTableDiffSql(array &$result, string $table, array $diff): void
-    {
-        // only_in_baseline: 基准有表、线上无 -> 线上 CREATE TABLE（占位）
-        if (!empty($diff['only_in_baseline'])) {
-            foreach ($diff['only_in_baseline'] as $tableName) {
-                $t = is_array($tableName) ? ($tableName[0] ?? $tableName) : $tableName;
-                $result['create'][] = $this->buildCreateTablePlaceholderSql((string) $t);
-            }
-        }
-
-        // only_in_live: 线上有表、基准无 -> 线上 DROP TABLE
-        if (!empty($diff['only_in_live'])) {
-            foreach ($diff['only_in_live'] as $tableName) {
-                $result['drop'][] = $this->buildDropTableSql((string) $tableName);
-            }
-        }
-
-        if (!empty($diff['field_changed'])) {
-            foreach ($diff['field_changed'] as $attr => $change) {
-                if (!is_array($change)) {
-                    continue;
-                }
-                $result['alter'] = array_merge(
-                    $result['alter'],
-                    $this->buildAlterTableSql($table, (string) $attr, $change)
-                );
-            }
-        }
     }
 
     /**

@@ -14,6 +14,33 @@ use TxAdmin\SchemaCompare\Generator\AbstractSqlGenerator;
  */
 class CkSqlGenerator extends AbstractSqlGenerator
 {
+    /**
+     * 不支持任何 ALTER COLUMN 操作的引擎（ADD/DROP/MODIFY 全部不支持）
+     */
+    protected const NO_ALTER_COLUMN_ENGINES = [
+        'Dictionary', 'View', 'MaterializedView', 'LiveView',
+        'Set', 'Join', 'Null', 'URL', 'File',
+        'Kafka', 'RabbitMQ', 'S3', 'HDFS',
+        'PostgreSQL', 'MySQL', 'MongoDB', 'ODBC', 'JDBC',
+        'ExternalDistributed', 'Distributed',
+    ];
+
+    /**
+     * 仅支持 ADD COLUMN 的引擎（不支持 DROP/MODIFY）
+     */
+    protected const ADD_ONLY_ALTER_ENGINES = [
+        'Log', 'TinyLog', 'StripeLog',
+    ];
+
+    /** @var array<string, string> 表名 => 引擎名，从 indexes 维度的实时数据中提取 */
+    protected array $tableEngines = [];
+
+    /**
+     * 生成 CK 索引/分区键/排序键差异的 SQL
+     *
+     * CK indexes 维度现在使用 diffs_by_table 结构（与 MySQL 统一）
+     * 每个表的差异包含：only_in_baseline, only_in_live, field_changed
+     */
     public function generateIndexSql(array $indexDiff): array
     {
         $result = [
@@ -22,25 +49,35 @@ class CkSqlGenerator extends AbstractSqlGenerator
             'warn' => [],
         ];
 
-        // only_in_baseline: 基准有表、线上无 -> 线上需 CREATE TABLE
-        if (!empty($indexDiff['only_in_baseline'])) {
-            foreach ($indexDiff['only_in_baseline'] as $tableName) {
-                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于基准库（线上缺失），线上需 CREATE TABLE";
+        // 处理 diffs_by_table 结构（新的统一结构）
+        foreach ($indexDiff['diffs_by_table'] ?? [] as $table => $diff) {
+            // 整表缺失：跳过（由 columns 维度处理）
+            if (!empty($diff['table_missing'])) {
+                continue;
             }
-        }
-        // only_in_live: 线上有表、基准无 -> 线上需 DROP TABLE
-        if (!empty($indexDiff['only_in_live'])) {
-            foreach ($indexDiff['only_in_live'] as $tableName) {
-                $result['warn'][] = "-- [CK] 表 `{$tableName}` 仅存在于线上库（基准缺失），线上需 DROP TABLE";
+
+            // only_in_baseline: 基准有、线上无 -> 需要创建索引/分区键等
+            if (!empty($diff['only_in_baseline'])) {
+                foreach ($diff['only_in_baseline'] as $key) {
+                    $result['warn'][] = "-- [CK] 表 `{$table}` 的索引/键 `{$key}` 仅存在于基准库，需 CREATE INDEX 或重建表";
+                }
             }
-        }
-        if (!empty($indexDiff['changed'])) {
-            foreach ($indexDiff['changed'] as $tableName => $changes) {
-                foreach ($changes as $attr => $val) {
-                    // 线上对齐基准：原值=线上值，目标值=基准值
-                    $old = $val['live'] ?? '';
-                    $new = $val['baseline'] ?? '';
-                    $result['warn'][] = "-- [CK] 表 `{$tableName}` 的 {$attr} 需由线上值 '{$old}' 同步为基准值 '{$new}' (分区键/排序键变更需重建表)";
+
+            // only_in_live: 线上有、基准无 -> 需要删除
+            if (!empty($diff['only_in_live'])) {
+                foreach ($diff['only_in_live'] as $key) {
+                    $result['warn'][] = "-- [CK] 表 `{$table}` 的索引/键 `{$key}` 仅存在于线上库，需 DROP INDEX 或重建表";
+                }
+            }
+
+            // field_changed: 属性变化 -> 需要重建表
+            if (!empty($diff['field_changed'])) {
+                foreach ($diff['field_changed'] as $key => $changes) {
+                    foreach ($changes as $attr => $val) {
+                        $old = $val['live'] ?? '';
+                        $new = $val['baseline'] ?? '';
+                        $result['warn'][] = "-- [CK] 表 `{$table}` 的 `{$key}` 的 {$attr} 需由 '{$old}' 同步为 '{$new}' (需重建表)";
+                    }
                 }
             }
         }
@@ -48,42 +85,53 @@ class CkSqlGenerator extends AbstractSqlGenerator
         return $result;
     }
 
-    protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
+    /**
+     * 重写：先从 indexes 维度的实时数据中提取引擎信息，供后续 SQL 生成判断
+     */
+    public function generatePreciseSql(array $diffResult, array $liveData, array $baselineData = []): array
     {
-        // 整表缺失的表由 columns 维度统一处理，indexes 维度跳过避免重复 warn
-        if (!empty($missingTables)) {
-            $indexDiff = $this->filterMissingTablesFromCkIndexDiff($indexDiff, $missingTables);
+        $this->tableEngines = [];
+        foreach ($liveData['indexes'] ?? [] as $row) {
+            $table = $row['table'] ?? '';
+            $engine = $row['engine'] ?? '';
+            if ($table !== '' && $engine !== '') {
+                $this->tableEngines[$table] = $engine;
+            }
         }
 
+        return parent::generatePreciseSql($diffResult, $liveData, $baselineData);
+    }
+
+    protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
+    {
+        // 整表缺失的表由 columns 维度统一处理，indexes 维度在 generateIndexSql 中通过 table_missing 标记跳过
         return $this->generateIndexSql($indexDiff);
     }
 
     /**
-     * 从 CK indexes 维度的平铺 diff 中移除整表缺失的表
+     * 判断指定表是否支持某种 ALTER COLUMN 操作
      *
-     * CK indexes 结构为平铺：only_in_baseline / only_in_live / changed
+     * @param string $table 表名
+     * @param string $operation 操作类型：'add' | 'drop' | 'modify'
+     * @return bool true=支持或引擎未知（默认放行），false=不支持
      */
-    protected function filterMissingTablesFromCkIndexDiff(array $indexDiff, array $missingTables): array
+    protected function isAlterColumnSupported(string $table, string $operation): bool
     {
-        if (!empty($indexDiff['only_in_baseline'])) {
-            $indexDiff['only_in_baseline'] = array_values(array_filter(
-                $indexDiff['only_in_baseline'],
-                fn ($t) => !isset($missingTables[$t])
-            ));
-        }
-        if (!empty($indexDiff['only_in_live'])) {
-            $indexDiff['only_in_live'] = array_values(array_filter(
-                $indexDiff['only_in_live'],
-                fn ($t) => !isset($missingTables[$t])
-            ));
-        }
-        if (!empty($indexDiff['changed'])) {
-            foreach ($missingTables as $table => $_) {
-                unset($indexDiff['changed'][$table]);
-            }
+        $engine = $this->tableEngines[$table] ?? '';
+        if ($engine === '') {
+            return true; // 引擎未知（如 generateAll 路径无实时数据），默认放行
         }
 
-        return $indexDiff;
+        if (in_array($engine, self::NO_ALTER_COLUMN_ENGINES, true)) {
+            return false;
+        }
+
+        // Log 系列引擎仅支持 ADD，不支持 DROP/MODIFY
+        if ($operation !== 'add' && in_array($engine, self::ADD_ONLY_ALTER_ENGINES, true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -113,7 +161,14 @@ class CkSqlGenerator extends AbstractSqlGenerator
             ? " COMMENT '" . addslashes($row['comment']) . "'"
             : '';
 
-        return "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$default}{$codec}{$comment};";
+        $sql = "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$default}{$codec}{$comment};";
+
+        if (!$this->isAlterColumnSupported($table, 'add')) {
+            $engine = $this->tableEngines[$table] ?? '';
+            return "-- TODO: 表 `{$table}` 引擎为 {$engine}，不支持 ADD COLUMN，需人工处理\n-- {$sql}";
+        }
+
+        return $sql;
     }
 
     protected function buildAddColumnPlaceholderSql(string $table, string $fieldName): string
@@ -123,11 +178,33 @@ class CkSqlGenerator extends AbstractSqlGenerator
 
     protected function buildDropColumnSql(string $table, string $columnName): string
     {
-        return "ALTER TABLE `{$table}` DROP COLUMN IF EXISTS `{$columnName}`;";
+        $sql = "ALTER TABLE `{$table}` DROP COLUMN IF EXISTS `{$columnName}`;";
+
+        if (!$this->isAlterColumnSupported($table, 'drop')) {
+            $engine = $this->tableEngines[$table] ?? '';
+            return "-- TODO: 表 `{$table}` 引擎为 {$engine}，不支持 DROP COLUMN，需人工处理\n-- {$sql}";
+        }
+
+        return $sql;
     }
 
     protected function buildModifyColumnSql(string $table, string $fieldName, array $changes): array
     {
+        // 引擎不支持 MODIFY COLUMN 时，统一打 TODO
+        if (!$this->isAlterColumnSupported($table, 'modify')) {
+            $engine = $this->tableEngines[$table] ?? '';
+            $detail = [];
+            foreach ($changes as $attr => $values) {
+                $oldVal = $values['live'] ?? '';
+                $newVal = $values['baseline'] ?? '';
+                $detail[] = "{$attr}: {$oldVal} -> {$newVal}";
+            }
+            return [
+                "-- TODO: 表 `{$table}` 引擎为 {$engine}，不支持 MODIFY COLUMN，需人工处理",
+                '-- ' . implode(', ', $detail),
+            ];
+        }
+
         $sqls = [];
 
         foreach ($changes as $attr => $values) {
@@ -175,9 +252,18 @@ class CkSqlGenerator extends AbstractSqlGenerator
         }
 
         if (isset($changes['type'])) {
+            // 类型变更需要先 DROP 再 ADD，任一不支持就打 TODO
+            if (!$this->isAlterColumnSupported($table, 'drop') || !$this->isAlterColumnSupported($table, 'add')) {
+                $engine = $this->tableEngines[$table] ?? '';
+                return [
+                    "-- TODO: 表 `{$table}` 引擎为 {$engine}，不支持 ALTER COLUMN（先删后加），需人工处理",
+                    '-- ' . $this->buildAddColumnSql($table, $targetRow),
+                ];
+            }
+
             return [
                 '-- CK 类型变更需要先删后加',
-                "ALTER TABLE `{$table}` DROP COLUMN IF EXISTS `{$fieldName}`;",
+                $this->buildDropColumnSql($table, $fieldName),
                 $this->buildAddColumnSql($table, $targetRow),
             ];
         }
