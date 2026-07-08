@@ -173,7 +173,8 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             : '';
         $name = $row['name'] ?? $row['column_name'] ?? '';
 
-        return "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$nullable}{$default}{$extra}{$charset}{$collation}{$comment};";
+        // MySQL 列定义顺序：type → charset/collation → nullable → default → extra → comment
+        return "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$type}{$charset}{$collation}{$nullable}{$default}{$extra}{$comment};";
     }
 
     protected function buildAddColumnPlaceholderSql(string $table, string $fieldName): string
@@ -299,7 +300,8 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             : '';
         $name = $row['name'] ?? $row['column_name'] ?? '';
 
-        return "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$type}{$nullable}{$default}{$extra}{$charset}{$collation}{$comment};";
+        // MySQL 列定义顺序：type → charset/collation → nullable → default → extra → comment
+        return "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$type}{$charset}{$collation}{$nullable}{$default}{$extra}{$comment};";
     }
 
     protected function buildDropIndexSql(string $table, string $indexName): string
