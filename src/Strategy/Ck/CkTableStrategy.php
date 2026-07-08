@@ -2,28 +2,23 @@
 
 declare(strict_types=1);
 
-namespace TxAdmin\SchemaCompare\Strategy\Mysql;
+namespace TxAdmin\SchemaCompare\Strategy\Ck;
 
 use TxAdmin\SchemaCompare\Contracts\ConnectionAdapterInterface;
 use TxAdmin\SchemaCompare\Strategy\AbstractStrategy;
 
 /**
- * MySQL Table 属性对比策略
+ * ClickHouse Table 对比策略
  *
- * 基准和实时数据均为 information_schema.TABLES 行数组
+ * 对比 system.tables 中表的存在性及表级属性（引擎、注释）
  * diff key: "{table}"
  *
- * 注意：AUTO_INCREMENT 查出来存档但不纳入对比（会随数据增长变化产生噪音）
- * 默认排除分表（按月表 _yymm / 哈希分表 _000 等），只对比基础表
+ * 与 CkIndexesStrategy 的区别：
+ *   - CkIndexesStrategy 对比分区键/排序键/主键/采样键（索引级属性）
+ *   - CkTableStrategy 对比引擎/注释等表级属性，并明确检查表是否存在
  */
-class MysqlTableStrategy extends AbstractStrategy
+class CkTableStrategy extends AbstractStrategy
 {
-    /**
-     * 是否排除分表（表名以 _数字 结尾的表）
-     * @var bool
-     */
-    public bool $excludeSplitTables = true;
-
     public function getKey(): string
     {
         return 'tables';
@@ -32,33 +27,29 @@ class MysqlTableStrategy extends AbstractStrategy
     public function getDefaultCompareFields(): array
     {
         return [
-            'engine',           // 存储引擎（InnoDB / MyISAM / MEMORY）
-            'table_collation',  // 表排序规则（如 utf8mb4_general_ci）
-            'table_comment',    // 表注释
+            'engine',       // 存储引擎（MergeTree / Dictionary / View 等）
+            'comment',      // 表注释
         ];
     }
 
     public function fetchData(ConnectionAdapterInterface $adapter, string $database): array
     {
+        $fields = implode(', ', array_merge(
+            ['database', 'name AS table'],
+            $this->getDefaultCompareFields()
+        ));
         $sql = "
-            SELECT
-                TABLE_SCHEMA AS `database`,
-                TABLE_NAME AS `table`,
-                ENGINE AS `engine`,
-                TABLE_COLLATION AS `table_collation`,
-                TABLE_COMMENT AS `table_comment`,
-                AUTO_INCREMENT AS `auto_increment`
-            FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)} AND TABLE_TYPE = 'BASE TABLE'
-            {$this->splitTableFilter()}
-            ORDER BY TABLE_NAME
+            SELECT {$fields}
+            FROM system.tables
+            WHERE database = {$this->quoteStringLiteral($database)}
+            ORDER BY name
         ";
         return $adapter->query($sql);
     }
 
     /**
      * diff key: "{table}"
-     * 按表归组输出（与 CkTableStrategy 结构一致）
+     * 按表归组输出（与 MysqlTableStrategy 结构一致，便于 MissingTableSimplifier 统一处理）
      */
     public function diff(array $baseline, array $live): array
     {
@@ -114,16 +105,5 @@ class MysqlTableStrategy extends AbstractStrategy
             ],
             'diffs_by_table' => $diffsByTable,
         ];
-    }
-
-    /**
-     * 生成分表过滤 SQL 片段
-     * 匹配 table-splitter 的所有分表后缀：_yymm / _YYYYWW / _YYYY / _000 / _0
-     */
-    protected function splitTableFilter(): string
-    {
-        return $this->excludeSplitTables
-            ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
-            : '';
     }
 }

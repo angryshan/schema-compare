@@ -27,7 +27,8 @@ class CkIndexesStrategy extends AbstractStrategy
 
     public function fetchData(ConnectionAdapterInterface $adapter, string $database): array
     {
-        $fields = implode(', ', array_merge(['database', 'name AS table'], $this->getDefaultCompareFields()));
+        // engine 仅作为元数据供 SQL 生成器判断 ALTER 支持，不参与对比
+        $fields = implode(', ', array_merge(['database', 'name AS table', 'engine'], $this->getDefaultCompareFields()));
         $sql = "
             SELECT {$fields}
             FROM system.tables
@@ -39,6 +40,7 @@ class CkIndexesStrategy extends AbstractStrategy
 
     /**
      * diff key: "{table}"
+     * 按表归组输出（与 MysqlTableStrategy 结构一致，便于 MissingTableSimplifier 统一处理）
      */
     public function diff(array $baseline, array $live): array
     {
@@ -71,6 +73,18 @@ class CkIndexesStrategy extends AbstractStrategy
             }
         }
 
+        // 按表归组
+        $diffsByTable = [];
+        foreach ($onlyInBaseline as $table) {
+            $diffsByTable[$table]['only_in_baseline'][] = $table;
+        }
+        foreach ($onlyInLive as $table) {
+            $diffsByTable[$table]['only_in_live'][] = $table;
+        }
+        foreach ($changed as $table => $attrs) {
+            $diffsByTable[$table]['field_changed'] = $attrs;
+        }
+
         $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
 
         return [
@@ -80,9 +94,7 @@ class CkIndexesStrategy extends AbstractStrategy
                 'only_in_live' => count($onlyInLive),
                 'field_changed' => count($changed),
             ],
-            'only_in_baseline' => $onlyInBaseline,
-            'only_in_live' => $onlyInLive,
-            'changed' => $changed,
+            'diffs_by_table' => $diffsByTable,
         ];
     }
 }

@@ -10,11 +10,12 @@ use TxAdmin\SchemaCompare\Contracts\SchemaStrategyInterface;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkColumnsStrategy;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkIndexesStrategy;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkProjectionsStrategy;
+use TxAdmin\SchemaCompare\Strategy\Ck\CkTableStrategy;
 
 /**
  * ClickHouse 结构对比驱动
  *
- * 默认使用 Columns / Indexes / Projections 三个策略
+ * 默认使用 Tables / Columns / Indexes / Projections 四个策略
  * 可通过构造函数第三个参数覆盖，实现自定义策略组合
  */
 class CkSchemaDriver extends AbstractSchemaDriver
@@ -35,6 +36,7 @@ class CkSchemaDriver extends AbstractSchemaDriver
     protected function defaultStrategies(): array
     {
         return [
+            new CkTableStrategy(),
             new CkColumnsStrategy(),
             new CkIndexesStrategy(),
             new CkProjectionsStrategy(),
