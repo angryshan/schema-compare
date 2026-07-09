@@ -133,6 +133,7 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         // 由于目标表可能已有主键，自动追加会导致执行失败，此处仅加 TODO 提醒人工确认
         $extra = $row['extra'] ?? '';
         if (stripos($extra, 'auto_increment') !== false) {
+            $sql = '-- ' . $sql;
             $sql .= " -- TODO: 该列为 auto_increment，需定义为主键或唯一键，请确认目标表是否已有主键后再执行";
         }
 
@@ -245,6 +246,7 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         // 由于目标表可能已有主键，自动追加会导致执行失败，此处仅加 TODO 提醒人工确认
         $extra = $row['extra'] ?? '';
         if (stripos($extra, 'auto_increment') !== false) {
+            $sql = '-- ' . $sql;
             $sql .= " -- TODO: 该列为 auto_increment，需定义为主键或唯一键，请确认目标表是否已有主键后再执行";
         }
 
