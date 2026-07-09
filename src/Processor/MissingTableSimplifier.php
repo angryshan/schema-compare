@@ -36,7 +36,7 @@ class MissingTableSimplifier
 
         // 简化各维度的差异报告
         foreach ($diffResult['details'] as $dimension => &$detail) {
-            // 1. diffs_by_table 结构（tables / columns / indexes 维度）：直接按表名分组
+            // 1. diffs_by_table 结构（tables / columns / CK indexes 维度）：直接按表名分组
             if (!empty($detail['diffs_by_table'])) {
                 // tables 维度：缺表是正常差异，只标记 table_missing 用于前端识别，保留原计数
                 // 其他维度：清空缺表的字段级差异，排除缺表计数
@@ -45,7 +45,14 @@ class MissingTableSimplifier
                 $detail['summary'] = $this->recalcSubKeySummary($detail['diffs_by_table'], !$isTablesDim);
             }
 
-            // 2. diffs_by_projection 结构（projections 维度）：按 "表名.投影名" 分组
+            // 2. diffs_by_index 结构（MySQL indexes 维度）：按 "表名.索引名" 分组
+            if (!empty($detail['diffs_by_index'])) {
+                $detail['diffs_by_index'] = $this->simplifySubKeyGrouped($detail['diffs_by_index'], $missingTables);
+                // indexes 维度排除缺表计数
+                $detail['summary'] = $this->recalcSubKeySummary($detail['diffs_by_index'], true);
+            }
+
+            // 3. diffs_by_projection 结构（projections 维度）：按 "表名.投影名" 分组
             if (!empty($detail['diffs_by_projection'])) {
                 $detail['diffs_by_projection'] = $this->simplifySubKeyGrouped($detail['diffs_by_projection'], $missingTables);
                 // projections 维度排除缺表计数
