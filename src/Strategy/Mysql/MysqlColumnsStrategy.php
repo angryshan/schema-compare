@@ -38,6 +38,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
             'character_set_name',   // 字符集
             'collation_name',       // 排序规则
             'comment',              // 列注释
+            'ordinal_position',     // 字段在表中的位置顺序
         ];
     }
 
@@ -54,7 +55,8 @@ class MysqlColumnsStrategy extends AbstractStrategy
                 EXTRA AS `extra`,
                 CHARACTER_SET_NAME AS `character_set_name`,
                 COLLATION_NAME AS `collation_name`,
-                COLUMN_COMMENT AS `comment`
+                COLUMN_COMMENT AS `comment`,
+                ORDINAL_POSITION AS `ordinal_position`
             FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)}
             {$this->splitTableFilter()}

@@ -70,6 +70,9 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
     protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
     {
         $result = ['create' => [], 'drop' => []];
+        // 用于去重：记录已处理的索引
+        $processedCreates = [];
+        $processedDrops = [];
 
         $baselineMap = [];
         foreach ($baselineIndexes as $row) {
@@ -90,24 +93,42 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
                     continue;
                 }
 
+                // 去重 key
+                $dedupKey = $table . '.' . $idxName;
+
                 // only_in_live: 线上有、基准无 -> 线上 DROP INDEX
                 if (!empty($diff['only_in_live'])) {
-                    $result['drop'][] = $this->buildDropIndexSql($table, $idxName);
+                    if (!isset($processedDrops[$dedupKey])) {
+                        $result['drop'][] = $this->buildDropIndexSql($table, $idxName);
+                        $processedDrops[$dedupKey] = true;
+                    }
                 }
+
                 // only_in_baseline: 基准有、线上无 -> 线上 CREATE INDEX（用基准定义）
                 if (!empty($diff['only_in_baseline'])) {
-                    $baselineRows = $baselineMap[$indexKey] ?? null;
-                    $result['create'][] = $baselineRows
-                        ? $this->buildCreateCompositeIndex($table, $idxName, $baselineRows)
-                        : "-- TODO: CREATE INDEX `{$idxName}` ON `{$table}`";
+                    if (!isset($processedCreates[$dedupKey])) {
+                        $baselineRows = $baselineMap[$indexKey] ?? null;
+                        $result['create'][] = $baselineRows
+                            ? $this->buildCreateCompositeIndex($table, $idxName, $baselineRows)
+                            : "-- TODO: CREATE INDEX `{$idxName}` ON `{$table}`";
+                        $processedCreates[$dedupKey] = true;
+                    }
+                    continue; // 已有 only_in_baseline，跳过 field_changed 处理
                 }
+
                 // field_changed: 线上 DROP 旧索引 + 用基准定义 CREATE 新索引
                 if (!empty($diff['field_changed'])) {
-                    $result['drop'][] = $this->buildDropIndexSql($table, $idxName);
-                    $baselineRows = $baselineMap[$indexKey] ?? null;
-                    $result['create'][] = $baselineRows
-                        ? $this->buildCreateCompositeIndex($table, $idxName, $baselineRows)
-                        : "-- TODO: CREATE INDEX `{$idxName}` ON `{$table}` (索引属性变化)";
+                    if (!isset($processedDrops[$dedupKey])) {
+                        $result['drop'][] = $this->buildDropIndexSql($table, $idxName);
+                        $processedDrops[$dedupKey] = true;
+                    }
+                    if (!isset($processedCreates[$dedupKey])) {
+                        $baselineRows = $baselineMap[$indexKey] ?? null;
+                        $result['create'][] = $baselineRows
+                            ? $this->buildCreateCompositeIndex($table, $idxName, $baselineRows)
+                            : "-- TODO: CREATE INDEX `{$idxName}` ON `{$table}` (索引属性变化)";
+                        $processedCreates[$dedupKey] = true;
+                    }
                 }
             }
 
@@ -179,6 +200,9 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
                         $sqls[] = "ALTER TABLE `{$table}` ALTER COLUMN `{$fieldName}` {$newDef}; -- 原: '{$oldVal}'";
                     }
                     break;
+                case 'ordinal_position':
+                    $sqls[] = "-- ALTER TABLE `{$table}` MODIFY COLUMN `{$fieldName}` ... (位置调整: {$oldVal} -> {$newVal})";
+                    break;
                 default:
                     $sqls[] = "-- ALTER TABLE `{$table}` MODIFY `{$fieldName}` {$attr}: {$oldVal} -> {$newVal}";
             }
@@ -198,8 +222,218 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             return $this->buildModifyColumnSql($table, $fieldName, $changes);
         }
 
+        // 检测是否包含位置变更
+        $hasPositionChange = isset($changes['ordinal_position']);
+
         // 有完整基准行定义时，生成完整 MODIFY COLUMN（覆盖 type/comment/default/nullable 等所有变更）
-        return [$this->buildModifyColumnFromRowSql($table, $targetRow)];
+        $sql = $this->buildModifyColumnFromRowSql($table, $targetRow);
+
+        // 如果有位置变更，添加 TODO 注释提醒
+        if ($hasPositionChange) {
+            $oldPos = $changes['ordinal_position']['live'] ?? '?';
+            $newPos = $changes['ordinal_position']['baseline'] ?? '?';
+            $sql .= " -- TODO: 字段位置需要调整 ({$oldPos} -> {$newPos})，请使用 AFTER/FIRST 子句手动指定位置";
+        }
+
+        return [$sql];
+    }
+
+    /**
+     * 精确路径：字段变更 SQL（MySQL 特殊处理，支持字段位置调整）n     *
+     * 为包含位置变更的字段自动生成 AFTER/FIRST 子句
+     */
+    protected function generatePreciseColumnSql(array $columnDiff, array $liveColumns, array $baselineColumns = []): array
+    {
+        $result = ['add' => [], 'drop' => [], 'modify' => []];
+
+        $baselineMap = [];
+        // 按表分组，用于确定字段位置
+        $baselineByTable = [];
+        foreach ($baselineColumns as $row) {
+            $table = $row['table'] ?? '';
+            $name = $row['name'] ?? '';
+            $key = $table . '.' . $name;
+            $baselineMap[$key] = $row;
+
+            if (!isset($baselineByTable[$table])) {
+                $baselineByTable[$table] = [];
+            }
+            $baselineByTable[$table][] = $row;
+        }
+
+        // 为每个表构建位置映射：ordinal_position => field_name
+        $positionMapByTable = [];
+        foreach ($baselineByTable as $table => $rows) {
+            // 按 ordinal_position 排序
+            usort($rows, function ($a, $b) {
+                return (int) ($a['ordinal_position'] ?? 0) - (int) ($b['ordinal_position'] ?? 0);
+            });
+
+            $positionMapByTable[$table] = [];
+            foreach ($rows as $idx => $row) {
+                $pos = (int) ($row['ordinal_position'] ?? ($idx + 1));
+                $positionMapByTable[$table][$pos] = $row['name'] ?? '';
+            }
+        }
+
+        foreach ($columnDiff['diffs_by_table'] ?? [] as $table => $diff) {
+            // 整表缺失：生成 CREATE TABLE / DROP TABLE，不生成逐字段语句
+            if (!empty($diff['table_missing'])) {
+                if ($diff['missing_side'] === 'live') {
+                    $result['add'][] = $this->buildCreateTablePlaceholderSql($table);
+                } else {
+                    $result['drop'][] = $this->buildDropTableSql($table);
+                }
+                continue;
+            }
+
+            // only_in_baseline: 基准有、线上无 -> 线上 ADD COLUMN
+            if (!empty($diff['only_in_baseline'])) {
+                foreach ($diff['only_in_baseline'] as $fieldKey) {
+                    $fieldName = $this->extractFieldName($fieldKey);
+                    $baselineRow = $baselineMap[$table . '.' . $fieldName] ?? null;
+                    if ($baselineRow) {
+                        // 确定前一个字段，用于生成 AFTER/FIRST
+                        $prevColumn = $this->getPreviousColumn($table, $fieldName, $positionMapByTable);
+                        $result['add'][] = $this->buildAddColumnWithPositionSql($table, $baselineRow, $prevColumn);
+                    } else {
+                        $result['add'][] = $this->buildAddColumnPlaceholderSql($table, $fieldName);
+                    }
+                }
+            }
+
+            // only_in_live: 线上有、基准无 -> 线上 DROP COLUMN
+            if (!empty($diff['only_in_live'])) {
+                foreach ($diff['only_in_live'] as $fieldKey) {
+                    $fieldName = $this->extractFieldName($fieldKey);
+                    $result['drop'][] = $this->buildDropColumnSql($table, $fieldName);
+                }
+            }
+
+            // field_changed: 线上 MODIFY 到基准值
+            if (!empty($diff['field_changed'])) {
+                foreach ($diff['field_changed'] as $fieldKey => $changes) {
+                    $fieldName = $this->extractFieldName($fieldKey);
+                    $baselineRow = $baselineMap[$table . '.' . $fieldName] ?? null;
+
+                    // 检测是否包含位置变更
+                    $hasPositionChange = isset($changes['ordinal_position']);
+                    $prevColumn = null;
+                    if ($hasPositionChange) {
+                        $prevColumn = $this->getPreviousColumn($table, $fieldName, $positionMapByTable);
+                    }
+
+                    $result['modify'] = array_merge(
+                        $result['modify'],
+                        $this->buildPreciseModifySqlWithPosition($table, $fieldName, $changes, $baselineRow, $prevColumn)
+                    );
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * 获取指定字段的前一个字段名
+     *
+     * @param string $table 表名
+     * @param string $fieldName 当前字段名
+     * @param array $positionMapByTable 位置映射 [table => [position => field_name]]
+     * @return string|null null 表示 FIRST，空字符串表示未知
+     */
+    protected function getPreviousColumn(string $table, string $fieldName, array $positionMapByTable): ?string
+    {
+        if (!isset($positionMapByTable[$table])) {
+            return '';
+        }
+
+        $positions = $positionMapByTable[$table];
+        $currentPos = null;
+
+        // 找到当前字段的位置
+        foreach ($positions as $pos => $name) {
+            if ($name === $fieldName) {
+                $currentPos = $pos;
+                break;
+            }
+        }
+
+        if ($currentPos === null) {
+            return '';
+        }
+
+        // 如果是第一个字段，返回 null 表示 FIRST
+        $minPos = min(array_keys($positions));
+        if ($currentPos === $minPos) {
+            return null;
+        }
+
+        // 找到前一个位置
+        $prevPos = null;
+        foreach (array_keys($positions) as $pos) {
+            if ($pos < $currentPos) {
+                $prevPos = $pos;
+            } else {
+                break;
+            }
+        }
+
+        return $prevPos !== null ? ($positions[$prevPos] ?? '') : '';
+    }
+
+    /**
+     * 生成带位置子句的 ADD COLUMN SQL
+     *
+     * @param string|null $prevColumn 前一个字段名，null 表示 FIRST
+     */
+    protected function buildAddColumnWithPositionSql(string $table, array $row, ?string $prevColumn): string
+    {
+        $name = $row['name'] ?? $row['column_name'] ?? '';
+        $colDef = $this->buildColumnDefinition($row);
+
+        // 位置子句
+        $positionClause = '';
+        if ($prevColumn === null) {
+            $positionClause = ' FIRST';
+        } elseif ($prevColumn !== '') {
+            $positionClause = " AFTER `{$prevColumn}`";
+        }
+
+        $sql = "ALTER TABLE `{$table}` ADD COLUMN `{$name}` {$colDef}{$positionClause};";
+
+        // auto_increment 列处理
+        $extra = $row['extra'] ?? '';
+        if (stripos($extra, 'auto_increment') !== false) {
+            $sql = '-- ' . $sql;
+            $sql .= " -- TODO: 该列为 auto_increment，需定义为主键或唯一键，请确认目标表是否已有主键后再执行";
+        }
+
+        return $sql;
+    }
+
+    /**
+     * 带位置信息的精确 MODIFY SQL 生成
+     *
+     * @param string|null $prevColumn 前一个字段名，null 表示 FIRST
+     * @return string[]
+     */
+    protected function buildPreciseModifySqlWithPosition(string $table, string $fieldName, array $changes, ?array $targetRow, ?string $prevColumn): array
+    {
+        if (!$targetRow) {
+            return $this->buildModifyColumnSql($table, $fieldName, $changes);
+        }
+
+        $sql = $this->buildModifyColumnFromRowSql($table, $targetRow, $prevColumn);
+
+        // 如果有位置变更，添加注释
+        if (isset($changes['ordinal_position'])) {
+            $oldPos = $changes['ordinal_position']['live'] ?? '?';
+            $newPos = $changes['ordinal_position']['baseline'] ?? '?';
+            $sql .= " -- 位置: {$oldPos} -> {$newPos}";
+        }
+
+        return [$sql];
     }
 
     protected function buildDropTableSql(string $table): string
@@ -235,12 +469,25 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
 
     /**
      * 用行数据生成完整的 MODIFY COLUMN 语句（将线上列定义同步为基准列定义）
+     *
+     * @param array|null $prevColumn 前一个字段名（用于生成 AFTER 子句），null 表示 FIRST
      */
-    protected function buildModifyColumnFromRowSql(string $table, array $row): string
+    protected function buildModifyColumnFromRowSql(string $table, array $row, ?string $prevColumn = null): string
     {
         $name = $row['name'] ?? $row['column_name'] ?? '';
         $colDef = $this->buildColumnDefinition($row);
-        $sql = "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$colDef};";
+
+        // 位置子句：FIRST 或 AFTER `prev_column`
+        $positionClause = '';
+        if (isset($row['ordinal_position'])) {
+            if ($prevColumn === null) {
+                $positionClause = ' FIRST';
+            } elseif ($prevColumn !== '') {
+                $positionClause = " AFTER `{$prevColumn}`";
+            }
+        }
+
+        $sql = "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$colDef}{$positionClause};";
 
         // auto_increment 列在 MySQL 中必须定义为键（PRIMARY KEY 或 UNIQUE KEY）
         // 由于目标表可能已有主键，自动追加会导致执行失败，此处仅加 TODO 提醒人工确认
