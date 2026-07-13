@@ -46,13 +46,13 @@ $json = $driver->exportJson('2001_log_metadata');
 file_put_contents('/path/to/baseline.json', $json);
 
 // 对比基准 vs 实时
-$result = $driver->compareFromJson(
+$diffResult = $driver->compareFromJson(
     file_get_contents('/path/to/baseline.json'),
     '2001_log_metadata'
 );
 
-var_dump($result['has_diff']);   // bool
-var_dump($result['details']);    // ['columns' => [...], 'indexes' => [...], 'projections' => [...]]
+var_dump($diffResult['has_diff']);   // bool
+var_dump($diffResult['details']);    // ['columns' => [...], 'indexes' => [...], 'projections' => [...]]
 ```
 
 ### 3. Hyperf 使用
@@ -66,10 +66,23 @@ use TxAdmin\SchemaCompare\Driver\CkSchemaDriver;
 $adapter = new HyperfAdapter('clickhouse');
 $driver  = new CkSchemaDriver($adapter);
 
-$result = $driver->compareFromJson($jsonBaseline, $database);
+$diffResult = $driver->compareFromJson($jsonBaseline, $database);
 ```
 
-### 4. 管理器（多驱动场景）
+### 4. 跨库对比（不同库名）
+
+```php
+<?php
+
+// 使用 diff() 方法直接对比（无库名校验）
+$baseline = json_decode(file_get_contents('/path/to/baseline.json'), true);
+$live = $driver->fetchStructure('target_database');
+$diffResult = $driver->diff($baseline, $live);
+
+$diffResult = $driver->compareFromArray($baseline, 'target_database');
+```
+
+### 5. 管理器（多驱动场景）
 
 ```php
 <?php
@@ -83,24 +96,34 @@ $manager = new SchemaCompareManager();
 $manager->register(new CkSchemaDriver(new ThinkPHPAdapter('clickhouse')));
 $manager->register(new MysqlSchemaDriver(new ThinkPHPAdapter('default')));
 
-$result = $manager->compareFromJson('clickhouse', $jsonBaseline, $database);
+$diffResult = $manager->compareFromJson('clickhouse', $jsonBaseline, $database);
 ```
 
-### 5. SQL 生成器（支持 MySQL 和 ClickHouse）
+### 6. SQL 生成器（支持 MySQL 和 ClickHouse）
 
 ```php
 <?php
 
 use TxAdmin\SchemaCompare\Generator\SqlGenerator;
+use TxAdmin\SchemaCompare\Generator\Mysql\MysqlSqlGenerator;
+use TxAdmin\SchemaCompare\Generator\Ck\CkSqlGenerator;
 
-// 创建 SQL 生成器实例
+// 方式1：通过字符串创建（工厂模式）
 $generator = new SqlGenerator('mysql'); // 或 'clickhouse'
 
+// 方式2：直接使用具体生成器（推荐，更灵活）
+$generator = new MysqlSqlGenerator();
+// $generator = new CkSqlGenerator();
+
+// $diffResult 通过 $driver->compareFromJson() 或 $driver->diff() 获取
 // 基础版：根据 diff 结果生成所有 SQL
 $sqls = $generator->generateAll($diffResult);
 
-// 精确版：传入 live 数据，生成更精确的 SQL
-$sqls = $generator->generatePreciseSql($diffResult, $liveData);
+// 精确版：传入 live 数据和基准数据，生成更精确的 SQL（含字段位置调整）
+// liveData 和 baselineData 通过 $driver->fetchStructure($database) 获取
+$liveData = $driver->fetchStructure('2001_log_metadata');
+$baselineData = json_decode(file_get_contents('/path/to/baseline.json'), true);
+$sqls = $generator->generatePreciseSql($diffResult, $liveData, $baselineData);
 
 // 合并所有 SQL 为一个字符串
 $allSql = $generator->combineSql($sqls);
@@ -110,21 +133,29 @@ $allSql = $generator->combineSql($sqls);
 
 | 操作 | MySQL | ClickHouse |
 |------|-------|------------|
-| 添加列 | `ALTER TABLE ... ADD COLUMN` | `ALTER TABLE ... ADD COLUMN` (支持 CODEC) |
+| 添加列 | `ALTER TABLE ... ADD COLUMN` (自动带 AFTER/FIRST) | `ALTER TABLE ... ADD COLUMN` (支持 CODEC) |
 | 删除列 | `ALTER TABLE ... DROP COLUMN` | `ALTER TABLE ... DROP COLUMN IF EXISTS` |
 | 修改列类型 | `ALTER TABLE ... MODIFY COLUMN` | 不支持直接修改，需先删后加 |
+| 修改列位置 | `ALTER TABLE ... MODIFY COLUMN ... AFTER/FIRST` | 不支持 |
 | 修改列注释 | `ALTER TABLE ... MODIFY COLUMN ... COMMENT` | `ALTER TABLE ... MODIFY COLUMN COMMENT` |
 | 修改默认值 | `ALTER TABLE ... ALTER COLUMN SET DEFAULT` | `ALTER TABLE ... ALTER COLUMN DEFAULT` |
 | 创建索引 | `CREATE INDEX` | `ALTER TABLE ... ADD INDEX TYPE` |
 | 删除索引 | `ALTER TABLE ... DROP INDEX` | `ALTER TABLE ... DROP INDEX IF EXISTS` |
 | 删除表 | `DROP TABLE IF EXISTS` | `DROP TABLE IF EXISTS` |
 
+#### MySQL 特殊功能：
+
+1. **字段位置自动调整**：对比 `ordinal_position`，自动生成 `AFTER` 或 `FIRST` 子句
+2. **索引 SQL 去重**：同一索引不会重复生成 DROP/CREATE
+3. **宽松对比模式**：支持忽略空格、连字符等格式差异（通过 `setLooseComparison(true)` 开启）
+
 #### ClickHouse 特殊限制说明：
 
 1. **类型修改**：CK 不支持直接修改列类型，需要先删除再添加
 2. **压缩编码**：不支持在线修改，生成提示性 SQL 注释
-3. **表引擎**：不支持在线修改 ENGINE，需重建表
+3. **表引擎**：不支持在线修改 ENGINE，需重建表（且阿里云与本地引擎名称可能不同，已跳过对比）
 4. **排序键/主键列**：不能删除属于排序键或主键的列
+5. **Dictionary 引擎**：不支持 `DROP COLUMN` 等 ALTER 操作
 
 ### 代码规范
 
