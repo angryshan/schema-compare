@@ -27,7 +27,7 @@ class CkTableStrategy extends AbstractStrategy
     public function getDefaultCompareFields(): array
     {
         return [
-            'engine',       // 存储引擎（MergeTree / Dictionary / View 等）
+            // 'engine',       // 存储引擎（MergeTree / Dictionary / View 等）
             'comment',      // 表注释
         ];
     }
