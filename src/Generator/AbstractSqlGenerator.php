@@ -39,6 +39,15 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
         return $sqls;
     }
 
+    /**
+     * 生成字段差异 SQL（基础版）
+     *
+     * 根据 diff 结果生成 ADD / DROP / MODIFY 语句（占位符形式）
+     * 如需完整列定义，请使用 generatePreciseSql()
+     *
+     * @param array $columnDiff columns 维度的 diff 结果，包含 diffs_by_table 结构
+     * @return array ['add' => [...], 'drop' => [...], 'modify' => [...]]
+     */
     public function generateColumnSql(array $columnDiff): array
     {
         $result = [
@@ -255,16 +264,20 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
     // ----------------------------------------------------------------
 
     /**
-     * 精确路径：字段变更 SQL
+     * 精确路径：字段变更 SQL（带完整列定义）
      *
      * SQL 在线上执行，让线上对齐基准：
-     *   - only_in_baseline（基准有、线上无）-> ADD COLUMN（用基准行定义）
+     *   - only_in_baseline（基准有、线上无）-> ADD COLUMN（用基准行定义，带 AFTER/FIRST）
      *   - only_in_live    （线上有、基准无）-> DROP COLUMN
      *   - field_changed                    -> MODIFY COLUMN 到基准定义
      *   - table_missing                    -> CREATE TABLE / DROP TABLE（整表级）
      *
-     * @param array $liveColumns    线上实时字段数据（保留参数，当前方向下主要用于兼容）
-     * @param array $baselineColumns 基准字段数据，用于生成 ADD / MODIFY 的完整定义
+     * MySQL 特殊：会根据 ordinal_position 自动生成 AFTER/FIRST 子句调整字段位置
+     *
+     * @param array $columnDiff      columns 维度的 diff 结果
+     * @param array $liveColumns     线上实时字段数据（当前未使用，保留用于后续扩展）
+     * @param array $baselineColumns 基准字段数据，用于生成 ADD / MODIFY 的完整定义和位置信息
+     * @return array ['add' => [...], 'drop' => [...], 'modify' => [...]]
      */
     protected function generatePreciseColumnSql(array $columnDiff, array $liveColumns, array $baselineColumns = []): array
     {

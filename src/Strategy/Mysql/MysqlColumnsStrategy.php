@@ -66,8 +66,35 @@ class MysqlColumnsStrategy extends AbstractStrategy
     }
 
     /**
-     * diff key: "{table}.{name}"
-     * 按表归组输出
+     * 对比字段差异
+     *
+     * diff key: "{table}.{name}"（表名.字段名）
+     *
+     * 输出结构：
+     * [
+     *   'has_diff' => true,
+     *   'summary' => [
+     *     'only_in_baseline' => 2,  // 基准有、线上无的字段数
+     *     'only_in_live' => 1,      // 线上有、基准无的字段数
+     *     'field_changed' => 3,     // 字段属性变化的字段数
+     *   ],
+     *   'diffs_by_table' => [
+     *     'tx_user' => [
+     *       'only_in_baseline' => ['tx_user.new_field'],
+     *       'only_in_live' => ['tx_user.old_field'],
+     *       'field_changed' => [
+     *         'tx_user.name' => [
+     *           'type' => ['baseline' => 'varchar(100)', 'live' => 'varchar(50)'],
+     *           'ordinal_position' => ['baseline' => '3', 'live' => '2'],
+     *         ],
+     *       ],
+     *     ],
+     *   ],
+     * ]
+     *
+     * @param array $baseline 基准字段数据（fetchData 结果）
+     * @param array $live 线上字段数据（fetchData 结果）
+     * @return array diff 结果
      */
     public function diff(array $baseline, array $live): array
     {

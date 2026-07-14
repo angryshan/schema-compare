@@ -67,6 +67,22 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         return "CREATE {$unique}INDEX `{$idxName}` ON `{$table}` (" . implode(', ', $columns) . ');';
     }
 
+    /**
+     * 精确路径：生成索引差异 SQL（带去重）
+     *
+     * 逻辑：
+     *   - only_in_live: 线上有、基准无 -> DROP INDEX
+     *   - only_in_baseline: 基准有、线上无 -> CREATE INDEX（用基准定义）
+     *   - field_changed: 索引属性变化 -> DROP + CREATE（重建索引）
+     *
+     * 去重：同一索引不会重复生成 DROP/CREATE（防止复合索引多列重复）
+     *
+     * @param array $indexDiff indexes 维度的 diff 结果（diffs_by_index 结构）
+     * @param array $liveIndexes 线上索引数据（fetchData 结果）
+     * @param array $baselineIndexes 基准索引数据（fetchData 结果）
+     * @param array $missingTables 整表缺失集合 ['表名' => 'live'|'baseline', ...]
+     * @return array ['create' => [...], 'drop' => [...]]
+     */
     protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
     {
         $result = ['create' => [], 'drop' => []];
@@ -135,14 +151,18 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             return $result;
         }
 
-        // MySQL indexes 维度统一使用 diffs_by_index 结构（key=table.index_name）
-        // diffs_by_table 分支为旧兼容代码，已删除
-
         return $result;
     }
 
     /**
-     * 用行数据生成完整的 ADD COLUMN 语句（线上对齐基准时传入基准行）
+     * 生成 ADD COLUMN 语句
+     *
+     * 根据行数据生成完整的 ALTER TABLE ADD COLUMN 语句
+     * 自动处理 auto_increment 列的 TODO 注释（需人工确认主键）
+     *
+     * @param string $table 表名
+     * @param array $row 字段行数据（name, type, is_nullable, column_default, extra, comment, ordinal_position 等）
+     * @return string SQL 语句
      */
     protected function buildAddColumnSql(string $table, array $row): string
     {
@@ -239,8 +259,20 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
     }
 
     /**
-     * 精确路径：字段变更 SQL（MySQL 特殊处理，支持字段位置调整）n     *
-     * 为包含位置变更的字段自动生成 AFTER/FIRST 子句
+     * 精确路径：字段变更 SQL（MySQL 特殊处理，支持字段位置调整）
+     *
+     * 与父类相比，MySQL 实现增加了：
+     * 1. 字段位置映射构建：根据 ordinal_position 确定字段顺序
+     * 2. 自动生成 AFTER/FIRST：ADD COLUMN 和 MODIFY COLUMN 带位置子句
+     *
+     * 位置确定逻辑：
+     * - 第一个字段（ordinal_position 最小）-> FIRST
+     * - 其他字段 -> AFTER `前一个字段名`
+     *
+     * @param array $columnDiff columns 维度的 diff 结果
+     * @param array $liveColumns 线上字段数据（当前未使用）
+     * @param array $baselineColumns 基准字段数据，用于生成完整列定义和位置信息
+     * @return array ['add' => [...], 'drop' => [...], 'modify' => [...]]
      */
     protected function generatePreciseColumnSql(array $columnDiff, array $liveColumns, array $baselineColumns = []): array
     {
