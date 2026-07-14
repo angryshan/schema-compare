@@ -60,14 +60,28 @@ var_dump($diffResult['details']);    // ['columns' => [...], 'indexes' => [...],
 ```php
 <?php
 
-use TxAdmin\SchemaCompare\Adapters\HyperfAdapter;
+use TxAdmin\SchemaCompare\Adapters\HyperfAdapter;      // PDO 方式（ClickHouse）
+use TxAdmin\SchemaCompare\Adapters\HyperfORMAdapter;   // ORM 方式（MySQL）
 use TxAdmin\SchemaCompare\Driver\CkSchemaDriver;
+use TxAdmin\SchemaCompare\Driver\MysqlSchemaDriver;
 
+// ClickHouse（PDO 方式）
 $adapter = new HyperfAdapter('clickhouse');
 $driver  = new CkSchemaDriver($adapter);
 
+// MySQL（ORM 方式）
+$adapter = new HyperfORMAdapter('default');
+$driver  = new MysqlSchemaDriver($adapter);
+
 $diffResult = $driver->compareFromJson($jsonBaseline, $database);
 ```
+
+**Hyperf 适配器说明：**
+
+| 适配器 | 组件 | 适用数据库 | 说明 |
+|--------|------|------------|------|
+| `HyperfAdapter` | `hyperf/db` (PDO) | ClickHouse | 轻量级 SQL 执行，与 ThinkPHP 的 PDO 方式命名一致 |
+| `HyperfORMAdapter` | `hyperf/db-connection` (ORM) | MySQL | 基于 Eloquent ORM，提供连接池和模型功能 |
 
 ### 4. 跨库对比（不同库名）
 
