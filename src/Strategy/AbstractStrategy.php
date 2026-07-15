@@ -17,6 +17,14 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
     protected array $compareFields;
 
     /**
+     * 是否开启宽松比较
+     * true = 忽略空格、换行、制表符差异
+     * false = 严格逐字符比较
+     * @var bool
+     */
+    public bool $looseComparison = true;
+
+    /**
      * @param null|array $compareFields 为 null 时使用 getDefaultCompareFields()
      */
     public function __construct(?array $compareFields = null)
@@ -131,11 +139,38 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
         $bVal = $this->normalizeValue($bRow[$field] ?? null);
         $lVal = $this->normalizeValue($lRow[$field] ?? null);
 
+        // 宽松比较：忽略空格、换行、制表符差异
+        if ($this->looseComparison) {
+            $bVal = $this->normalizeForCompare($bVal);
+            $lVal = $this->normalizeForCompare($lVal);
+        }
+
         if ($bVal !== $lVal) {
             return ['baseline' => $bVal, 'live' => $lVal];
         }
 
         return null;
+    }
+
+    /**
+     * 宽松比较归一化：去除多余空白字符
+     *
+     * 处理内容：
+     *   - 去除首尾空格
+     *   - 将多个连续空白（空格、换行、制表符）替换为单个空格
+     *   - 统一换行符为 \n
+     *
+     * @param string $value 原始值
+     * @return string 归一化后的值
+     */
+    protected function normalizeForCompare(string $value): string
+    {
+        // 统一换行符为 \n
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+        // 将多个连续空白（空格、换行、制表符）替换为单个空格
+        $value = preg_replace('/[\s]+/', ' ', $value);
+        // 去除首尾空格
+        return trim($value);
     }
 
     /**
