@@ -367,17 +367,17 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
     }
 
     /**
-     * 获取指定字段的前一个字段名
+     * 获取指定字段的前一个字段名（用于生成 AFTER 子句）
      *
      * @param string $table 表名
      * @param string $fieldName 当前字段名
      * @param array $positionMapByTable 位置映射 [table => [position => field_name]]
-     * @return string|null null 表示 FIRST，空字符串表示未知
+     * @return string|null null 表示未知/错误，'' 表示 FIRST，字符串表示 AFTER
      */
     protected function getPreviousColumn(string $table, string $fieldName, array $positionMapByTable): ?string
     {
         if (!isset($positionMapByTable[$table])) {
-            return '';
+            return null;
         }
 
         $positions = $positionMapByTable[$table];
@@ -392,13 +392,13 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         }
 
         if ($currentPos === null) {
-            return '';
+            return null;
         }
 
-        // 如果是第一个字段，返回 null 表示 FIRST
+        // 如果是第一个字段，返回 '' 表示 FIRST
         $minPos = min(array_keys($positions));
         if ($currentPos === $minPos) {
-            return null;
+            return '';
         }
 
         // 找到前一个位置
@@ -411,7 +411,7 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
             }
         }
 
-        return $prevPos !== null ? ($positions[$prevPos] ?? '') : '';
+        return $prevPos !== null ? ($positions[$prevPos] ?? null) : null;
     }
 
     /**
@@ -447,7 +447,10 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
     /**
      * 带位置信息的精确 MODIFY SQL 生成
      *
-     * @param string|null $prevColumn 前一个字段名，null 表示 FIRST
+     * @param string|null $prevColumn 前一个字段名
+     *                        null 表示无位置变更
+     *                        '' 表示位置变更到第一位（FIRST）
+     *                        字符串表示位置变更到指定字段后（AFTER）
      * @return string[]
      */
     protected function buildPreciseModifySqlWithPosition(string $table, string $fieldName, array $changes, ?array $targetRow, ?string $prevColumn): array
@@ -502,7 +505,10 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
     /**
      * 用行数据生成完整的 MODIFY COLUMN 语句（将线上列定义同步为基准列定义）
      *
-     * @param array|null $prevColumn 前一个字段名（用于生成 AFTER 子句），null 表示 FIRST
+     * @param array|null $prevColumn 前一个字段名（用于生成 AFTER 子句）
+     *                        null  表示无位置变更（不添加 FIRST/AFTER）
+     *                        ''    表示位置变更到第一位（添加 FIRST）
+     *                        字符串表示位置变更到指定字段后（添加 AFTER）
      */
     protected function buildModifyColumnFromRowSql(string $table, array $row, ?string $prevColumn = null): string
     {
@@ -510,13 +516,12 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
         $colDef = $this->buildColumnDefinition($row);
 
         // 位置子句：FIRST 或 AFTER `prev_column`
+        // null 表示无位置变更，不添加位置子句
         $positionClause = '';
-        if (isset($row['ordinal_position'])) {
-            if ($prevColumn === null) {
-                $positionClause = ' FIRST';
-            } elseif ($prevColumn !== '') {
-                $positionClause = " AFTER `{$prevColumn}`";
-            }
+        if ($prevColumn === '') {
+            $positionClause = ' FIRST';
+        } elseif ($prevColumn !== null && $prevColumn !== '') {
+            $positionClause = " AFTER `{$prevColumn}`";
         }
 
         $sql = "ALTER TABLE `{$table}` MODIFY COLUMN `{$name}` {$colDef}{$positionClause};";
