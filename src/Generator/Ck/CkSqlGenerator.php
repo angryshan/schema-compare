@@ -222,12 +222,16 @@ class CkSqlGenerator extends AbstractSqlGenerator
                     $sqls[] = "ALTER TABLE `{$table}` MODIFY COLUMN `{$fieldName}` COMMENT '{$newVal}'; -- 原: {$oldVal}";
                     break;
                 case 'default_expression':
-                case 'default_kind':
+                    // default_expression 是实际的默认值表达式（如 '0', 'now()' 等）
                     if ($newVal !== '') {
                         $sqls[] = "ALTER TABLE `{$table}` ALTER COLUMN `{$fieldName}` DEFAULT {$newVal}; -- 原: {$oldVal}";
                     } else {
                         $sqls[] = "ALTER TABLE `{$table}` ALTER COLUMN `{$fieldName}` REMOVE DEFAULT; -- 原: {$oldVal}";
                     }
+                    break;
+                case 'default_kind':
+                    // default_kind 是类型标识（如 'DEFAULT', 'MATERIALIZED', 'ALIAS'），不直接生成 SQL
+                    // 实际的默认值变更由 default_expression 处理
                     break;
                 case 'compression_codec':
                     $sqls[] = "-- CK 不支持在线修改压缩编码: {$fieldName} {$oldVal} -> {$newVal}";
