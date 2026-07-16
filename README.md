@@ -53,7 +53,10 @@ $diffResult = $driver->compareFromJson(
 
 var_dump($diffResult['has_diff']);   // bool
 var_dump($diffResult['details']);    // ['columns' => [...], 'indexes' => [...], 'projections' => [...]]
+// details 各字段含义见 docs/diff-details.md
 ```
+
+> **`details` 字段详解**：[diff-details.md](diff-details.md)（含 columns / indexes / tables / projections 各维度结构、对比字段与示例）
 
 ### 3. Hyperf 使用
 
