@@ -46,8 +46,7 @@ class MysqlTableStrategy extends AbstractStrategy
                 TABLE_NAME AS `table`,
                 ENGINE AS `engine`,
                 TABLE_COLLATION AS `table_collation`,
-                TABLE_COMMENT AS `table_comment`,
-                AUTO_INCREMENT AS `auto_increment`
+                TABLE_COMMENT AS `table_comment`
             FROM information_schema.TABLES
             WHERE TABLE_SCHEMA = {$this->quoteStringLiteral($database)} AND TABLE_TYPE = 'BASE TABLE'
             {$this->splitTableFilter()}

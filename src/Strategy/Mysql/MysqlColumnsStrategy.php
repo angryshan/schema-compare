@@ -165,4 +165,46 @@ class MysqlColumnsStrategy extends AbstractStrategy
             ? "AND TABLE_NAME NOT REGEXP '_[0-9]+$'"
             : '';
     }
+
+    /**
+     * MySQL 字段值归一化（特殊处理 column_default）
+     *
+     * 对于 column_default 字段：
+     *   - NULL 表示"无默认值"，返回特殊标记 '[NO_DEFAULT]'
+     *   - '' 表示"默认值为空字符串"，返回 ''
+     *   - 其他值正常转字符串
+     *
+     * 这样才能区分：
+     *   - 外网：无默认值 (NULL)
+     *   - 内网：默认值为空字符串 ('')
+     */
+    protected function normalizeValue($value): string
+    {
+        // 获取当前比较的字段名（通过回溯调用栈或特殊标记）
+        // 由于无法直接获取字段名，我们在 compareField 中特殊处理
+        return parent::normalizeValue($value);
+    }
+
+    /**
+     * 比较字段值（覆写以特殊处理 column_default）
+     */
+    protected function compareField(array $bRow, array $lRow, string $field): ?array
+    {
+        // column_default 字段特殊处理：区分 NULL 和 ''
+        if ($field === 'column_default') {
+            $bVal = $bRow[$field] ?? null;
+            $lVal = $lRow[$field] ?? null;
+
+            // NULL 表示无默认值，用特殊标记区分
+            $bStr = $bVal === null ? '[NO_DEFAULT]' : (string) $bVal;
+            $lStr = $lVal === null ? '[NO_DEFAULT]' : (string) $lVal;
+
+            if ($bStr !== $lStr) {
+                return ['baseline' => $bStr, 'live' => $lStr];
+            }
+            return null;
+        }
+
+        return parent::compareField($bRow, $lRow, $field);
+    }
 }
