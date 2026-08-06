@@ -195,6 +195,10 @@ class MissingTableSimplifier
     /**
      * 检测缺失的表
      *
+     * 判定规则：
+     * - 只有当某表的所有字段都只在一边存在，且字段数量 >= 10 时，才判定为整表缺失
+     * - 字段数量 < 10 时，视为普通字段差异，不判定为缺表
+     *
      * @return array ['表名' => 'live'|'baseline', ...]
      *               'live' 表示线上缺表（基准有线上无）
      *               'baseline' 表示基准缺表（线上有基准无）
@@ -202,6 +206,8 @@ class MissingTableSimplifier
     protected function detectMissingTables(array $columnsDetail): array
     {
         $missingTables = [];
+        // 阈值：判定为整表缺失的最小字段数量
+        $minFieldsThreshold = 10;
 
         foreach ($columnsDetail['diffs_by_table'] ?? [] as $table => $diffs) {
             $onlyInBaseline = $diffs['only_in_baseline'] ?? [];
@@ -212,7 +218,8 @@ class MissingTableSimplifier
             // => 线上缺表，missing_side = 'live'
             if (!empty($onlyInBaseline) && empty($onlyInLive) && empty($fieldChanged)) {
                 $allFieldsInBaseline = $this->allKeysBelongToTable($onlyInBaseline, $table);
-                if ($allFieldsInBaseline) {
+                // 只有字段数量达到阈值才判定为整表缺失
+                if ($allFieldsInBaseline && count($onlyInBaseline) >= $minFieldsThreshold) {
                     $missingTables[$table] = 'live';
                 }
             }
@@ -220,7 +227,8 @@ class MissingTableSimplifier
             // => 基准缺表，missing_side = 'baseline'
             elseif (!empty($onlyInLive) && empty($onlyInBaseline) && empty($fieldChanged)) {
                 $allFieldsInLive = $this->allKeysBelongToTable($onlyInLive, $table);
-                if ($allFieldsInLive) {
+                // 只有字段数量达到阈值才判定为整表缺失
+                if ($allFieldsInLive && count($onlyInLive) >= $minFieldsThreshold) {
                     $missingTables[$table] = 'baseline';
                 }
             }
