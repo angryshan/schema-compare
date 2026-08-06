@@ -87,6 +87,7 @@ class CkSqlGenerator extends AbstractSqlGenerator
 
     /**
      * 重写：先从 indexes 维度的实时数据中提取引擎信息，供后续 SQL 生成判断
+     * 并添加跳数索引（skipping_indexes）的 SQL 生成
      */
     public function generatePreciseSql(array $diffResult, array $liveData, array $baselineData = []): array
     {
@@ -99,7 +100,16 @@ class CkSqlGenerator extends AbstractSqlGenerator
             }
         }
 
-        return parent::generatePreciseSql($diffResult, $liveData, $baselineData);
+        // 调用父类方法生成基础 SQL
+        $sqls = parent::generatePreciseSql($diffResult, $liveData, $baselineData);
+
+        // 生成跳数索引 SQL（CK 特有）
+        $details = $diffResult['details'] ?? [];
+        if (!empty($details['skipping_indexes'])) {
+            $sqls['skipping_indexes'] = $this->generateSkippingIndexSql($details['skipping_indexes']);
+        }
+
+        return $sqls;
     }
 
     protected function generatePreciseIndexSql(array $indexDiff, array $liveIndexes, array $baselineIndexes = [], array $missingTables = []): array
@@ -306,5 +316,67 @@ class CkSqlGenerator extends AbstractSqlGenerator
             default:
                 return ["-- ALTER TABLE `{$table}` SET {$attr}={$newVal} (原: {$oldVal}) [CK 可能不支持]"];
         }
+    }
+
+    /**
+     * 生成跳数索引（Data Skipping Indexes）差异的 SQL
+     *
+     * CK 支持在线添加/删除跳数索引：
+     * - ADD INDEX: ALTER TABLE t ADD INDEX idx_name TYPE minmax GRANULARITY 4
+     * - DROP INDEX: ALTER TABLE t DROP INDEX idx_name
+     *
+     * @param array $skippingIndexDiff 跳数索引差异结果
+     * @return array ['add' => [], 'drop' => [], 'warn' => []]
+     */
+    public function generateSkippingIndexSql(array $skippingIndexDiff): array
+    {
+        $result = [
+            'add' => [],
+            'drop' => [],
+            'warn' => [],
+        ];
+
+        foreach ($skippingIndexDiff['diffs_by_table'] ?? [] as $table => $diff) {
+            // 整表缺失：跳过（由 columns 维度处理）
+            if (!empty($diff['table_missing'])) {
+                continue;
+            }
+
+            // only_in_baseline: 基准有、线上无 -> 需要创建索引
+            if (!empty($diff['only_in_baseline'])) {
+                foreach ($diff['only_in_baseline'] as $key) {
+                    // key 格式: "table.index_name"
+                    $parts = explode('.', $key, 2);
+                    $indexName = $parts[1] ?? $key;
+                    $result['warn'][] = "-- TODO: 表 `{$table}` 的跳数索引 `{$indexName}` 仅存在于基准库，需 ADD INDEX（需要完整定义）";
+                }
+            }
+
+            // only_in_live: 线上有、基准无 -> 需要删除索引
+            if (!empty($diff['only_in_live'])) {
+                foreach ($diff['only_in_live'] as $key) {
+                    $parts = explode('.', $key, 2);
+                    $indexName = $parts[1] ?? $key;
+                    $result['drop'][] = "ALTER TABLE `{$table}` DROP INDEX IF EXISTS `{$indexName}`;";
+                }
+            }
+
+            // field_changed: 属性变化 -> 需要先删后加
+            if (!empty($diff['field_changed'])) {
+                foreach ($diff['field_changed'] as $key => $changes) {
+                    $parts = explode('.', $key, 2);
+                    $indexName = $parts[1] ?? $key;
+                    $changeDetails = [];
+                    foreach ($changes as $attr => $val) {
+                        $old = $val['live'] ?? '';
+                        $new = $val['baseline'] ?? '';
+                        $changeDetails[] = "{$attr}: {$old} -> {$new}";
+                    }
+                    $result['warn'][] = "-- TODO: 表 `{$table}` 的跳数索引 `{$indexName}` 属性变更需重建（" . implode(', ', $changeDetails) . "）";
+                }
+            }
+        }
+
+        return $result;
     }
 }

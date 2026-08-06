@@ -10,6 +10,7 @@ use TxAdmin\SchemaCompare\Contracts\SchemaStrategyInterface;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkColumnsStrategy;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkIndexesStrategy;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkProjectionsStrategy;
+use TxAdmin\SchemaCompare\Strategy\Ck\CkSkippingIndexesStrategy;
 use TxAdmin\SchemaCompare\Strategy\Ck\CkTableStrategy;
 
 /**
@@ -39,6 +40,7 @@ class CkSchemaDriver extends AbstractSchemaDriver
             new CkTableStrategy(),
             new CkColumnsStrategy(),
             new CkIndexesStrategy(),
+            new CkSkippingIndexesStrategy(),
             new CkProjectionsStrategy(),
         ];
     }
