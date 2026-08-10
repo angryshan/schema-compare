@@ -71,59 +71,14 @@ class MysqlIndexesStrategy extends AbstractStrategy
             return $row['table'] . '.' . $row['index_name'] . '.' . (string) $row['seq_in_index'];
         };
 
-        $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap = $this->buildMap($live, $keyFn);
+        // 使用基类通用 diff 实现，但返回结构需要调整为 diffs_by_index
+        $result = $this->doDiff($baseline, $live, $keyFn, [$this, 'extractIndexFromKey']);
 
-        $onlyInBaseline = [];
-        $onlyInLive = [];
-        $changed = [];
-
-        foreach ($baselineMap as $key => $bRow) {
-            if (!isset($liveMap[$key])) {
-                $onlyInBaseline[] = $key;
-                continue;
-            }
-            $lRow = $liveMap[$key];
-            $diffs = $this->collectFieldDiffs($bRow, $lRow);
-            if (!empty($diffs)) {
-                $changed[$key] = $diffs;
-            }
-        }
-
-        foreach ($liveMap as $key => $lRow) {
-            if (!isset($baselineMap[$key])) {
-                $onlyInLive[] = $key;
-            }
-        }
-
-        // 按 "table.index_name" 归组
-        $diffsByIndex = [];
-        foreach ($onlyInBaseline as $key) {
-            $parts = explode('.', $key, 3);
-            $indexKey = $parts[0] . '.' . $parts[1];
-            $diffsByIndex[$indexKey]['only_in_baseline'][] = $key;
-        }
-        foreach ($onlyInLive as $key) {
-            $parts = explode('.', $key, 3);
-            $indexKey = $parts[0] . '.' . $parts[1];
-            $diffsByIndex[$indexKey]['only_in_live'][] = $key;
-        }
-        foreach ($changed as $key => $diffs) {
-            $parts = explode('.', $key, 3);
-            $indexKey = $parts[0] . '.' . $parts[1];
-            $diffsByIndex[$indexKey]['field_changed'][$key] = $diffs;
-        }
-
-        $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
-
+        // 将 diffs_by_table 重命名为 diffs_by_index
         return [
-            'has_diff' => $hasDiff,
-            'summary' => [
-                'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live' => count($onlyInLive),
-                'field_changed' => count($changed),
-            ],
-            'diffs_by_index' => $diffsByIndex,
+            'has_diff' => $result['has_diff'],
+            'summary' => $result['summary'],
+            'diffs_by_index' => $result['diffs_by_table'],
         ];
     }
 

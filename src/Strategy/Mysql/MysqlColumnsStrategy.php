@@ -102,57 +102,8 @@ class MysqlColumnsStrategy extends AbstractStrategy
             return $row['table'] . '.' . $row['name'];
         };
 
-        $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap = $this->buildMap($live, $keyFn);
-
-        $onlyInBaseline = [];
-        $onlyInLive = [];
-        $changed = [];
-
-        foreach ($baselineMap as $key => $bRow) {
-            if (!isset($liveMap[$key])) {
-                $onlyInBaseline[] = $key;
-                continue;
-            }
-            $lRow = $liveMap[$key];
-            $diffs = $this->collectFieldDiffs($bRow, $lRow);
-            if (!empty($diffs)) {
-                $changed[$key] = $diffs;
-            }
-        }
-
-        foreach ($liveMap as $key => $lRow) {
-            if (!isset($baselineMap[$key])) {
-                $onlyInLive[] = $key;
-            }
-        }
-
-        // 按表归组
-        $diffsByTable = [];
-        foreach ($onlyInBaseline as $key) {
-            [$table] = explode('.', $key, 2);
-            $diffsByTable[$table]['only_in_baseline'][] = $key;
-        }
-        foreach ($onlyInLive as $key) {
-            [$table] = explode('.', $key, 2);
-            $diffsByTable[$table]['only_in_live'][] = $key;
-        }
-        foreach ($changed as $key => $diffs) {
-            [$table] = explode('.', $key, 2);
-            $diffsByTable[$table]['field_changed'][$key] = $diffs;
-        }
-
-        $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
-
-        return [
-            'has_diff' => $hasDiff,
-            'summary' => [
-                'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live' => count($onlyInLive),
-                'field_changed' => count($changed),
-            ],
-            'diffs_by_table' => $diffsByTable,
-        ];
+        // 使用基类通用 diff 实现
+        return $this->doDiff($baseline, $live, $keyFn, [$this, 'extractTableFromKey']);
     }
 
     /**

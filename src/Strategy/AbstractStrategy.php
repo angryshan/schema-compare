@@ -190,4 +190,117 @@ abstract class AbstractStrategy implements SchemaStrategyInterface
 
         return $diffs;
     }
+
+    // ----------------------------------------------------------------
+    // 通用 diff 实现（子类可复用以减少重复代码）
+    // ----------------------------------------------------------------
+
+    /**
+     * 通用 diff 实现：对比两组数据，返回标准化的差异结果
+     *
+     * 适用于大多数策略，只需提供 key 生成函数和可选的表名提取函数
+     *
+     * @param array    $baseline      基准数据
+     * @param array    $live          线上数据
+     * @param callable $keyFn         fn(array $row): string 生成唯一 key
+     * @param callable|null $tableFn  fn(string $key): string 从 key 中提取表名（用于分组）
+     *                                为 null 时直接使用 key 作为表名
+     * @return array 标准化差异结果
+     */
+    protected function doDiff(
+        array $baseline,
+        array $live,
+        callable $keyFn,
+        ?callable $tableFn = null
+    ): array {
+        $baselineMap = $this->buildMap($baseline, $keyFn);
+        $liveMap = $this->buildMap($live, $keyFn);
+
+        $onlyInBaseline = [];
+        $onlyInLive = [];
+        $changed = [];
+
+        // 对比基准数据
+        foreach ($baselineMap as $key => $bRow) {
+            if (!isset($liveMap[$key])) {
+                $onlyInBaseline[] = $key;
+                continue;
+            }
+            $lRow = $liveMap[$key];
+            $diffs = $this->collectFieldDiffs($bRow, $lRow);
+            if (!empty($diffs)) {
+                $changed[$key] = $diffs;
+            }
+        }
+
+        // 找出线上独有的
+        foreach ($liveMap as $key => $lRow) {
+            if (!isset($baselineMap[$key])) {
+                $onlyInLive[] = $key;
+            }
+        }
+
+        // 按表归组
+        $diffsByTable = [];
+        foreach ($onlyInBaseline as $key) {
+            $table = $tableFn ? $tableFn($key) : $key;
+            $diffsByTable[$table]['only_in_baseline'][] = $key;
+        }
+        foreach ($onlyInLive as $key) {
+            $table = $tableFn ? $tableFn($key) : $key;
+            $diffsByTable[$table]['only_in_live'][] = $key;
+        }
+        foreach ($changed as $key => $diffs) {
+            $table = $tableFn ? $tableFn($key) : $key;
+            $diffsByTable[$table]['field_changed'][$key] = $diffs;
+        }
+
+        $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
+
+        return [
+            'has_diff' => $hasDiff,
+            'summary' => [
+                'only_in_baseline' => count($onlyInBaseline),
+                'only_in_live' => count($onlyInLive),
+                'field_changed' => count($changed),
+            ],
+            'diffs_by_table' => $diffsByTable,
+        ];
+    }
+
+    /**
+     * 从 "表名.子键" 格式的 key 中提取表名
+     *
+     * @param string $key  如 "users.idx_name"
+     * @return string      如 "users"
+     */
+    protected function extractTableFromKey(string $key): string
+    {
+        $pos = strpos($key, '.');
+        return $pos === false ? $key : substr($key, 0, $pos);
+    }
+
+    /**
+     * 从 "表名.投影名.字段名" 格式的 key 中提取投影键
+     *
+     * @param string $key  如 "users.proj_name.column"
+     * @return string      如 "users.proj_name"
+     */
+    protected function extractProjectionFromKey(string $key): string
+    {
+        $parts = explode('.', $key, 3);
+        return $parts[0] . '.' . $parts[1];
+    }
+
+    /**
+     * 从 "表名.索引名.序号" 格式的 key 中提取索引键
+     *
+     * @param string $key  如 "users.idx_name.1"
+     * @return string      如 "users.idx_name"
+     */
+    protected function extractIndexFromKey(string $key): string
+    {
+        $parts = explode('.', $key, 3);
+        return $parts[0] . '.' . $parts[1];
+    }
 }

@@ -65,54 +65,8 @@ class MysqlTableStrategy extends AbstractStrategy
             return $row['table'];
         };
 
-        $baselineMap = $this->buildMap($baseline, $keyFn);
-        $liveMap = $this->buildMap($live, $keyFn);
-
-        $onlyInBaseline = [];
-        $onlyInLive = [];
-        $changed = [];
-
-        foreach ($baselineMap as $table => $bRow) {
-            if (!isset($liveMap[$table])) {
-                $onlyInBaseline[] = $table;
-                continue;
-            }
-            $lRow = $liveMap[$table];
-            $diffs = $this->collectFieldDiffs($bRow, $lRow);
-            if (!empty($diffs)) {
-                $changed[$table] = $diffs;
-            }
-        }
-
-        foreach ($liveMap as $table => $lRow) {
-            if (!isset($baselineMap[$table])) {
-                $onlyInLive[] = $table;
-            }
-        }
-
-        // 按表归组
-        $diffsByTable = [];
-        foreach ($onlyInBaseline as $table) {
-            $diffsByTable[$table]['only_in_baseline'][] = $table;
-        }
-        foreach ($onlyInLive as $table) {
-            $diffsByTable[$table]['only_in_live'][] = $table;
-        }
-        foreach ($changed as $table => $attrs) {
-            $diffsByTable[$table]['field_changed'] = $attrs;
-        }
-
-        $hasDiff = !empty($onlyInBaseline) || !empty($onlyInLive) || !empty($changed);
-
-        return [
-            'has_diff' => $hasDiff,
-            'summary' => [
-                'only_in_baseline' => count($onlyInBaseline),
-                'only_in_live' => count($onlyInLive),
-                'field_changed' => count($changed),
-            ],
-            'diffs_by_table' => $diffsByTable,
-        ];
+        // 使用基类通用 diff 实现（key 本身就是表名，无需提取函数）
+        return $this->doDiff($baseline, $live, $keyFn);
     }
 
     /**
