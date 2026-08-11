@@ -26,9 +26,8 @@ class MissingTableSimplifier
             return $diffResult;
         }
 
-        // 收集缺失的表（从 columns 维度判断，因为所有表都有字段）
-        $columnsDetail = $diffResult['details']['columns'] ?? [];
-        $missingTables = $this->detectMissingTables($columnsDetail);
+        // 收集缺失的表（从 tables 维度判断）
+        $missingTables = $this->collectMissingTables($diffResult['details']);
 
         if (empty($missingTables)) {
             return $diffResult;
@@ -193,60 +192,27 @@ class MissingTableSimplifier
     }
 
     /**
-     * 检测缺失的表
+     * 从 tables 维度收集缺失的表信息
      *
-     * 判定规则：
-     * - 只有当某表的所有字段都只在一边存在，且字段数量 >= 10 时，才判定为整表缺失
-     * - 字段数量 < 10 时，视为普通字段差异，不判定为缺表
-     *
+     * @param array $details 所有维度的差异详情
      * @return array ['表名' => 'live'|'baseline', ...]
      *               'live' 表示线上缺表（基准有线上无）
      *               'baseline' 表示基准缺表（线上有基准无）
      */
-    protected function detectMissingTables(array $columnsDetail): array
+    protected function collectMissingTables(array $details): array
     {
         $missingTables = [];
-        // 阈值：判定为整表缺失的最小字段数量
-        $minFieldsThreshold = 10;
 
-        foreach ($columnsDetail['diffs_by_table'] ?? [] as $table => $diffs) {
-            $onlyInBaseline = $diffs['only_in_baseline'] ?? [];
-            $onlyInLive = $diffs['only_in_live'] ?? [];
-            $fieldChanged = $diffs['field_changed'] ?? [];
-
-            // 整表只在基准：基准有字段，线上无字段，且无字段变更
-            // => 线上缺表，missing_side = 'live'
-            if (!empty($onlyInBaseline) && empty($onlyInLive) && empty($fieldChanged)) {
-                $allFieldsInBaseline = $this->allKeysBelongToTable($onlyInBaseline, $table);
-                // 只有字段数量达到阈值才判定为整表缺失
-                if ($allFieldsInBaseline && count($onlyInBaseline) >= $minFieldsThreshold) {
-                    $missingTables[$table] = 'live';
-                }
-            }
-            // 整表只在线上：线上有字段，基准无字段，且无字段变更
-            // => 基准缺表，missing_side = 'baseline'
-            elseif (!empty($onlyInLive) && empty($onlyInBaseline) && empty($fieldChanged)) {
-                $allFieldsInLive = $this->allKeysBelongToTable($onlyInLive, $table);
-                // 只有字段数量达到阈值才判定为整表缺失
-                if ($allFieldsInLive && count($onlyInLive) >= $minFieldsThreshold) {
-                    $missingTables[$table] = 'baseline';
-                }
+        foreach ($details['tables']['diffs_by_table'] ?? [] as $table => $diffs) {
+            if (!empty($diffs['only_in_baseline']) && empty($diffs['only_in_live'])) {
+                // 基准有、线上无 => 线上缺表
+                $missingTables[$table] = 'live';
+            } elseif (!empty($diffs['only_in_live']) && empty($diffs['only_in_baseline'])) {
+                // 线上有、基准无 => 基准缺表
+                $missingTables[$table] = 'baseline';
             }
         }
 
         return $missingTables;
-    }
-
-    /**
-     * 检查所有 key 是否都属于指定表
-     */
-    protected function allKeysBelongToTable(array $keys, string $table): bool
-    {
-        foreach ($keys as $key) {
-            if (strpos($key, $table . '.') !== 0) {
-                return false;
-            }
-        }
-        return true;
     }
 }
