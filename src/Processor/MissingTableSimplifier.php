@@ -105,7 +105,7 @@ class MissingTableSimplifier
      *   2. 添加一条以表名为 key 的 table_missing 条目
      *   3. 保留非缺表的正常条目
      *
-     * @param array $grouped   diffs_by_index 或 diffs_by_projection
+     * @param array $grouped diffs_by_index 或 diffs_by_projection
      * @param array $missingTables ['表名' => 'live'|'baseline', ...]
      * @return array 简化后的分组数据
      */

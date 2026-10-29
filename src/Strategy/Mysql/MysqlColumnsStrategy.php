@@ -128,6 +128,7 @@ class MysqlColumnsStrategy extends AbstractStrategy
      * 这样才能区分：
      *   - 外网：无默认值 (NULL)
      *   - 内网：默认值为空字符串 ('')
+     * @param mixed $value
      */
     protected function normalizeValue($value): string
     {

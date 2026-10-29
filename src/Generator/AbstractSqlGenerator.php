@@ -274,8 +274,8 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
      *
      * MySQL 特殊：会根据 ordinal_position 自动生成 AFTER/FIRST 子句调整字段位置
      *
-     * @param array $columnDiff      columns 维度的 diff 结果
-     * @param array $liveColumns     线上实时字段数据（当前未使用，保留用于后续扩展）
+     * @param array $columnDiff columns 维度的 diff 结果
+     * @param array $liveColumns 线上实时字段数据（当前未使用，保留用于后续扩展）
      * @param array $baselineColumns 基准字段数据，用于生成 ADD / MODIFY 的完整定义和位置信息
      * @return array ['add' => [...], 'drop' => [...], 'modify' => [...]]
      */
@@ -340,7 +340,7 @@ abstract class AbstractSqlGenerator implements SqlGeneratorInterface
     /**
      * 精确路径：表属性变更 SQL（仅生成 ALTER，整表缺失由 columns 维度处理）
      *
-     * @param array $tableDiff    tables 维度的 diff 数据
+     * @param array $tableDiff tables 维度的 diff 数据
      * @param array $missingTables 整表缺失集合，这些表跳过（表级 DDL 由 columns 维度生成）
      */
     protected function generatePreciseTableSql(array $tableDiff, array $missingTables = []): array

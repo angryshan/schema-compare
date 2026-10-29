@@ -448,9 +448,9 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
      * 带位置信息的精确 MODIFY SQL 生成
      *
      * @param string|null $prevColumn 前一个字段名
-     *                        null 表示无位置变更
-     *                        '' 表示位置变更到第一位（FIRST）
-     *                        字符串表示位置变更到指定字段后（AFTER）
+     *                                null 表示无位置变更
+     *                                '' 表示位置变更到第一位（FIRST）
+     *                                字符串表示位置变更到指定字段后（AFTER）
      * @return string[]
      */
     protected function buildPreciseModifySqlWithPosition(string $table, string $fieldName, array $changes, ?array $targetRow, ?string $prevColumn): array
@@ -506,9 +506,9 @@ class MysqlSqlGenerator extends AbstractSqlGenerator
      * 用行数据生成完整的 MODIFY COLUMN 语句（将线上列定义同步为基准列定义）
      *
      * @param array|null $prevColumn 前一个字段名（用于生成 AFTER 子句）
-     *                        null  表示无位置变更（不添加 FIRST/AFTER）
-     *                        ''    表示位置变更到第一位（添加 FIRST）
-     *                        字符串表示位置变更到指定字段后（添加 AFTER）
+     *                               null  表示无位置变更（不添加 FIRST/AFTER）
+     *                               ''    表示位置变更到第一位（添加 FIRST）
+     *                               字符串表示位置变更到指定字段后（添加 AFTER）
      */
     protected function buildModifyColumnFromRowSql(string $table, array $row, ?string $prevColumn = null): string
     {

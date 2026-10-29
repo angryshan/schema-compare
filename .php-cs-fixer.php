@@ -66,6 +66,7 @@ return (new \PhpCsFixer\Config())
         'phpdoc_separation' => false,
         'single_quote' => false,
         'increment_style' => false,
+        'phpdoc_types_order' => false,
         'standardize_not_equals' => true,
         'multiline_comment_opening_closing' => true,
         'no_superfluous_phpdoc_tags' => false,

@@ -17,19 +17,19 @@ class SqlExporter
     protected array $groupLabels = [
         'columns' => '字段变更',
         'indexes' => '索引变更',
-        'tables'  => '表属性变更',
-        'create'  => '新增',
-        'drop'    => '删除',
-        'modify'  => '修改',
-        'alter'   => 'ALTER',
-        'warn'    => '提示（需人工确认）',
+        'tables' => '表属性变更',
+        'create' => '新增',
+        'drop' => '删除',
+        'modify' => '修改',
+        'alter' => 'ALTER',
+        'warn' => '提示（需人工确认）',
     ];
 
     /**
      * 导出 SQL 内容（直接输出到浏览器下载）
      *
-     * @param array  $sqlData  SQL 数据 ['连接名' => ['columns' => [...], ...]]
-     * @param string $type     数据库类型标识，如 'mysql' | 'ck'
+     * @param array $sqlData SQL 数据 ['连接名' => ['columns' => [...], ...]]
+     * @param string $type 数据库类型标识，如 'mysql' | 'ck'
      * @param string $filename 下载文件名（不含扩展名）
      */
     public function download(array $sqlData, string $type, string $filename = ''): void
@@ -51,8 +51,8 @@ class SqlExporter
     /**
      * 格式化 SQL 内容为字符串
      *
-     * @param array  $sqlData SQL 数据
-     * @param string $type    数据库类型标识
+     * @param array $sqlData SQL 数据
+     * @param string $type 数据库类型标识
      */
     public function format(array $sqlData, string $type): string
     {

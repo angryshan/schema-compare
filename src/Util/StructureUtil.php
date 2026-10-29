@@ -31,5 +31,4 @@ class StructureUtil
         }
         return null;
     }
-
 }
