@@ -9,6 +9,8 @@ use TxAdmin\SchemaCompare\Processor\MissingTableSimplifier;
 
 /**
  * MissingTableSimplifier 单元测试
+ *
+ * 实现约定：整表缺失只从 tables 维度的 diffs_by_table 判定，再回写到 columns / indexes 等维度。
  */
 class MissingTableSimplifierTest extends TestCase
 {
@@ -43,6 +45,15 @@ class MissingTableSimplifierTest extends TestCase
         $diffResult = [
             'has_diff' => true,
             'details' => [
+                'tables' => [
+                    'diffs_by_table' => [
+                        'users' => [
+                            'only_in_baseline' => ['users'],
+                            'only_in_live' => [],
+                            'field_changed' => [],
+                        ],
+                    ],
+                ],
                 'columns' => [
                     'diffs_by_table' => [
                         'users' => [
@@ -70,6 +81,15 @@ class MissingTableSimplifierTest extends TestCase
         $diffResult = [
             'has_diff' => true,
             'details' => [
+                'tables' => [
+                    'diffs_by_table' => [
+                        'orders' => [
+                            'only_in_baseline' => [],
+                            'only_in_live' => ['orders'],
+                            'field_changed' => [],
+                        ],
+                    ],
+                ],
                 'columns' => [
                     'diffs_by_table' => [
                         'orders' => [
@@ -149,6 +169,15 @@ class MissingTableSimplifierTest extends TestCase
         $diffResult = [
             'has_diff' => true,
             'details' => [
+                'tables' => [
+                    'diffs_by_table' => [
+                        'logs' => [
+                            'only_in_baseline' => ['logs'],
+                            'only_in_live' => [],
+                            'field_changed' => [],
+                        ],
+                    ],
+                ],
                 'columns' => [
                     'diffs_by_table' => [
                         'logs' => [
@@ -184,14 +213,23 @@ class MissingTableSimplifierTest extends TestCase
         $diffResult = [
             'has_diff' => true,
             'details' => [
+                'tables' => [
+                    'diffs_by_table' => [
+                        'users' => [
+                            'only_in_baseline' => ['users'],
+                            'only_in_live' => [],
+                            'field_changed' => [],
+                        ],
+                    ],
+                ],
                 'columns' => [
                     'diffs_by_table' => [
-                        'users' => [  // 整表缺失，应简化
+                        'users' => [
                             'only_in_baseline' => ['users.id'],
                             'only_in_live' => [],
                             'field_changed' => [],
                         ],
-                        'orders' => [  // 有字段变更，不应简化
+                        'orders' => [
                             'only_in_baseline' => [],
                             'only_in_live' => [],
                             'field_changed' => ['orders.total' => ['baseline' => 'int', 'live' => 'decimal']],
@@ -203,10 +241,7 @@ class MissingTableSimplifierTest extends TestCase
 
         $result = $this->simplifier->process($diffResult);
 
-        // users 被简化
         $this->assertTrue($result['details']['columns']['diffs_by_table']['users']['table_missing']);
-
-        // orders 未被简化
         $this->assertFalse(isset($result['details']['columns']['diffs_by_table']['orders']['table_missing']));
         $this->assertNotEmpty($result['details']['columns']['diffs_by_table']['orders']['field_changed']);
     }

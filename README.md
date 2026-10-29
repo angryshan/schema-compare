@@ -14,9 +14,9 @@
 
 ## 环境要求
 
-- PHP >= 7.4
-- Hyperf >= 2.0（可选，使用 Hyperf 适配器时）
-- ThinkPHP 6（可选，使用 ThinkPHP 适配器时）
+- PHP >= 8.4
+- Hyperf 3.x（可选，使用 Hyperf 适配器时：`hyperf/db` / `hyperf/db-connection`）
+- ThinkPHP 6+（可选，使用 ThinkPHP 适配器时）
 
 ## 安装
 

@@ -31,10 +31,14 @@ class SqlGeneratorTest extends TestCase
         $sqls = $generator->generateTableSql([
             'has_diff' => true,
             'summary' => ['only_in_baseline' => 0, 'only_in_live' => 0, 'field_changed' => 1],
-            'changed' => [
+            'diffs_by_table' => [
                 'users' => [
-                    'engine' => ['baseline' => 'MyISAM', 'live' => 'InnoDB'],
-                    'table_comment' => ['baseline' => 'old', 'live' => 'new'],
+                    'only_in_baseline' => [],
+                    'only_in_live' => [],
+                    'field_changed' => [
+                        'engine' => ['baseline' => 'MyISAM', 'live' => 'InnoDB'],
+                        'table_comment' => ['baseline' => 'old', 'live' => 'new'],
+                    ],
                 ],
             ],
         ]);
@@ -56,8 +60,18 @@ class SqlGeneratorTest extends TestCase
         $sqls = $generator->generateTableSql([
             'has_diff' => true,
             'summary' => ['only_in_baseline' => 1, 'only_in_live' => 1, 'field_changed' => 0],
-            'only_in_baseline' => ['extra_table'],
-            'only_in_live' => ['orphan_table'],
+            'diffs_by_table' => [
+                'extra_table' => [
+                    'only_in_baseline' => ['extra_table'],
+                    'only_in_live' => [],
+                    'field_changed' => [],
+                ],
+                'orphan_table' => [
+                    'only_in_baseline' => [],
+                    'only_in_live' => ['orphan_table'],
+                    'field_changed' => [],
+                ],
+            ],
         ]);
 
         // 基准有、线上无 -> CREATE
@@ -432,9 +446,13 @@ class SqlGeneratorTest extends TestCase
                 'tables' => [
                     'has_diff' => true,
                     'summary' => ['only_in_baseline' => 0, 'only_in_live' => 0, 'field_changed' => 1],
-                    'changed' => [
+                    'diffs_by_table' => [
                         'users' => [
-                            'engine' => ['baseline' => 'InnoDB', 'live' => 'MyISAM'],
+                            'only_in_baseline' => [],
+                            'only_in_live' => [],
+                            'field_changed' => [
+                                'engine' => ['baseline' => 'InnoDB', 'live' => 'MyISAM'],
+                            ],
                         ],
                     ],
                 ],
